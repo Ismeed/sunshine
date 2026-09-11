@@ -131,6 +131,12 @@
     if (!el.syncPill) return;
     el.syncPill.setAttribute('data-state', state_);
     el.syncText.textContent = SYNC_LABELS[state_] || state_;
+
+    if (state_ === 'online-synced' && global.Sync && global.Sync.lastSyncedAt()) {
+      el.syncPill.title = 'Last synced ' + global.Sync.lastSyncedAt().toLocaleTimeString();
+    } else {
+      el.syncPill.title = SYNC_LABELS[state_] || state_;
+    }
   }
 
   /* ------------------------------------------------------------- gate */

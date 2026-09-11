@@ -6,6 +6,10 @@ offline and syncs automatically to a shared Supabase database when the
 connection is available — but Supabase is entirely optional; the app is
 100% functional without it.
 
+The interface uses one shared design system (`css/styles.css`) with full
+automatic dark mode — it follows the OS/browser `prefers-color-scheme`
+setting on both screens, no toggle needed.
+
 ## The two screens
 
 - **Sales** ([index.html](index.html)) — counter staff. Browse and search
@@ -24,16 +28,33 @@ analytics unlock state — see "Admin password" below.
 
 ## Hosting it
 
-This is a static site: any static host works. Two free options:
+This is a static site: any static host works. No server-side code, no
+environment variables, no build step required to run — those only come
+into play if you turn on cloud sync (next section).
+
+### Vercel (recommended)
+
+```
+npm i -g vercel   # if you don't already have it
+vercel login
+vercel --prod
+```
+
+Run that from the project root — there's no `package.json`, so Vercel
+auto-detects it as a static site and deploys the files as-is. The
+included [vercel.json](vercel.json) sets the right cache headers so
+`sw.js` and `manifest.json` always revalidate (so PWA updates actually
+reach devices) while `css/`, `js/`, and icons get a short, safe cache
+lifetime. Or connect the GitHub repo in the Vercel dashboard for
+deploy-on-push — same result, no config to fill in.
+
+### Other free options
 
 - **GitHub Pages** — push this folder to a repo, enable Pages on the
   `main` branch, done.
-- **Netlify / Vercel / Cloudflare Pages** — drag-and-drop the folder or
-  connect the repo; no build command needed (leave the build command
-  blank, publish directory is the project root).
-
-No server-side code, no environment variables required to run — those
-only come into play if you turn on cloud sync (next section).
+- **Netlify / Cloudflare Pages** — drag-and-drop the folder or connect
+  the repo; leave the build command blank, publish directory is the
+  project root.
 
 ## Setting up cloud sync (optional)
 
@@ -67,10 +88,13 @@ device is enough; the app works fully without it.
 Sync pushes unsynced records (products, then sales, then payments — that
 order matters, so a payment's `sale_id` never references a sale the
 server hasn't seen yet) roughly every 25 seconds, whenever the browser
-comes back online, and right after every local write. Conflicts are
-resolved last-write-wins by `updated_at`, except a local edit that
-hasn't been pushed yet is never overwritten by an incoming remote
-record.
+comes back online, whenever the tab/PWA regains focus after being
+backgrounded (a counter tablet that sleeps and wakes hits this path,
+not just an actual network drop), and right after every local write.
+Conflicts are resolved last-write-wins by `updated_at`, except a local
+edit that hasn't been pushed yet is never overwritten by an incoming
+remote record. Hover the sync pill once it reads *Synced* to see the
+exact last-synced time.
 
 The Supabase JS client is vendored into [js/vendor/supabase.js](js/vendor/supabase.js)
 (copied from the npm package's UMD build) rather than loaded from a CDN,
@@ -99,13 +123,25 @@ stored only as a SHA-256 hash in IndexedDB (`settings` store, key
 
 ## Installing as an app (PWA)
 
-Sunshine Gadgets POS is installable. Open index.html in a browser that
-supports PWAs (Chrome, Edge, most Android browsers), and use the
-browser's "Install app" / "Add to Home Screen" option. Once installed,
-[sw.js](sw.js) caches the app shell (`css/`, `js/`, both HTML pages, the
-manifest, and the icons) so it loads instantly offline. Supabase network
-requests are never intercepted or cached by the service worker — they
-pass straight through, since they're inherently online-only.
+Sunshine Gadgets POS is installable, and it actively encourages it
+rather than waiting for someone to find the browser menu:
+[js/install.js](js/install.js) shows a slim on-brand banner ("Install
+Sunshine Gadgets POS") whenever the browser signals the app is
+installable (Chrome/Edge/Android's `beforeinstallprompt`) or, on iOS
+Safari — which never fires that event — with manual "Add to Home
+Screen" steps instead. Dismissing the banner doesn't silence it
+forever: the dismissal is remembered in IndexedDB (never
+`localStorage`) for 3 days, then it quietly offers again. It never
+reappears once the app is actually installed (detected via
+`display-mode: standalone`).
+
+Once installed, [sw.js](sw.js) caches the app shell (`css/`, `js/`,
+both HTML pages, the manifest, and the icons) cache-first on install
+and network-first-with-cache-fallback after, so it loads instantly
+offline and a fresh deploy still reaches installed devices. Supabase
+network requests are never intercepted or cached by the service
+worker — they pass straight through, since they're inherently
+online-only.
 
 ## What this version doesn't do yet
 

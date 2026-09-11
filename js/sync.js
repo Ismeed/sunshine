@@ -20,6 +20,7 @@
   var initialized = false;
   var syncing = false;
   var intervalHandle = null;
+  var lastSyncedAt = null;
 
   /* ------------------------------------------------------------- state */
 
@@ -161,6 +162,7 @@
     return pushAll()
       .then(pullAll)
       .then(function () {
+        lastSyncedAt = new Date();
         setState('online-synced');
         notifyPullComplete();
       })
@@ -191,6 +193,15 @@
     global.addEventListener('online', function () { runSync(); });
     global.addEventListener('offline', function () { setState('offline'); });
 
+    // Reconnecting the network is one trigger; coming back to a backgrounded
+    // tab/PWA is another - a counter tablet often sleeps and wakes rather
+    // than losing connectivity outright, and this catches that case too.
+    if (global.document) {
+      global.document.addEventListener('visibilitychange', function () {
+        if (global.document.visibilityState === 'visible') runSync();
+      });
+    }
+
     if (intervalHandle) global.clearInterval(intervalHandle);
     intervalHandle = global.setInterval(runSync, SYNC_INTERVAL_MS);
 
@@ -203,6 +214,7 @@
     init: init,
     runSync: runSync,
     currentState: function () { return currentState; },
+    lastSyncedAt: function () { return lastSyncedAt; },
     onStateChange: onStateChange,
     onPullComplete: onPullComplete
   };

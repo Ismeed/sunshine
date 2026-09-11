@@ -157,9 +157,16 @@
     if (!el.syncPill) return;
     el.syncPill.setAttribute('data-state', state_);
     el.syncText.textContent = SYNC_LABELS[state_] || state_;
-    el.syncPill.title = state_ === 'no-config'
-      ? 'Cloud sync is not configured. Everything is saved on this device.'
-      : SYNC_LABELS[state_];
+
+    if (state_ === 'no-config') {
+      el.syncPill.title = 'Cloud sync is not configured. Everything is saved on this device.';
+      return;
+    }
+    if (state_ === 'online-synced' && global.Sync && global.Sync.lastSyncedAt()) {
+      el.syncPill.title = 'Last synced ' + global.Sync.lastSyncedAt().toLocaleTimeString();
+      return;
+    }
+    el.syncPill.title = SYNC_LABELS[state_];
   }
 
   /* ------------------------------------------------------------- render */

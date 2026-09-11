@@ -10,7 +10,7 @@
 
 'use strict';
 
-var CACHE_VERSION = 'sunshine-pos-v1';
+var CACHE_VERSION = 'sunshine-pos-v2';
 
 var APP_SHELL = [
   './',
@@ -22,6 +22,7 @@ var APP_SHELL = [
   'js/app.js',
   'js/analytics.js',
   'js/sync.js',
+  'js/install.js',
   'js/supabase-config.js',
   'js/vendor/supabase.js',
   'icons/icon-192.png',
