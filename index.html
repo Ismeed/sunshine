@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sales &middot; Sunshine Gadgets POS</title>
+<meta name="description" content="Record sales and manage products for Sunshine Gadgets. Works offline.">
+<meta name="theme-color" content="#E9A227">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>Sunshine Gadgets</span>
+    <span class="brand-sub">POS</span>
+  </div>
+
+  <nav class="topnav" aria-label="Screens">
+    <a href="index.html" aria-current="page">Sales</a>
+    <a href="analytics.html">Analytics</a>
+  </nav>
+
+  <div class="topbar-spacer"></div>
+
+  <div class="sync-pill" id="syncPill" data-state="no-config" role="status" aria-live="polite">
+    <span class="sync-dot" aria-hidden="true"></span>
+    <span class="sync-text" id="syncText">Offline only</span>
+  </div>
+</header>
+
+<main class="sales-layout">
+
+  <!-- ---------- side rail ---------- -->
+  <aside class="rail">
+    <section class="rail-card" aria-labelledby="todayHeading">
+      <div class="rail-eyebrow" id="todayHeading">Today</div>
+      <div class="rail-date" id="todayDate">&nbsp;</div>
+      <div class="rail-figure" id="todayRevenue">&#8358;0</div>
+      <div class="rail-split">
+        <div>
+          <div class="k">Sales</div>
+          <div class="v" id="todayCount">0</div>
+        </div>
+        <div>
+          <div class="k">On credit</div>
+          <div class="v is-credit" id="todayCredit">&#8358;0</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="rail-card" aria-labelledby="recentHeading">
+      <div class="rail-eyebrow" id="recentHeading">Recent sales</div>
+      <ul class="rail-list" id="recentList">
+        <li><span class="rl-name">No sales yet today</span></li>
+      </ul>
+    </section>
+  </aside>
+
+  <!-- ---------- products ---------- -->
+  <section aria-labelledby="productsHeading">
+    <div class="section-head">
+      <h1 class="section-title" id="productsHeading">Products</h1>
+      <span class="section-note" id="productCount"></span>
+    </div>
+
+    <div class="toolbar">
+      <div class="search">
+        <span class="search-icon" aria-hidden="true">&#9906;</span>
+        <label class="sr-only" for="searchInput">Search products</label>
+        <input class="input" type="search" id="searchInput" placeholder="Search products&hellip;" autocomplete="off">
+      </div>
+      <button class="btn btn-primary" type="button" id="newProductBtn">+ New product</button>
+    </div>
+
+    <div class="chips" id="categoryChips" role="group" aria-label="Filter by category"></div>
+
+    <div class="product-grid" id="productGrid"></div>
+
+    <div class="empty" id="productEmpty" hidden>
+      <strong>No products match</strong>
+      Try a different search, or add a new product.
+    </div>
+  </section>
+
+</main>
+
+<!-- ========== New product modal ========== -->
+<div class="modal-backdrop" id="productModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
+    <div class="modal-head">
+      <h2 class="modal-title" id="productModalTitle">New product</h2>
+      <button class="icon-btn" type="button" id="productModalClose" aria-label="Close">&times;</button>
+    </div>
+
+    <form id="productForm" novalidate>
+      <div class="modal-body">
+        <label class="field">
+          <span class="field-label" for="pmName">Product name</span>
+          <input class="input" type="text" id="pmName" autocomplete="off" placeholder="e.g. Redmi Note 13">
+          <span class="field-error" id="pmNameError">Give the product a name.</span>
+        </label>
+
+        <div class="field">
+          <label class="field-label" for="pmCategory">Category</label>
+          <select class="select" id="pmCategory"></select>
+          <div id="pmNewCategoryWrap" hidden style="margin-top:8px">
+            <label class="sr-only" for="pmNewCategory">New category name</label>
+            <input class="input" type="text" id="pmNewCategory" autocomplete="off" placeholder="New category name">
+          </div>
+          <span class="field-error" id="pmCategoryError">Name the new category.</span>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="pmPrice">Default price <span class="opt">&mdash; optional</span></label>
+          <div class="prefix-input">
+            <span class="prefix" aria-hidden="true">&#8358;</span>
+            <input class="input" type="number" id="pmPrice" min="0" step="1" inputmode="decimal" placeholder="0">
+          </div>
+          <span class="field-error" id="pmPriceError">Price cannot be negative.</span>
+          <div class="section-note" style="margin-top:5px">Leave blank if the price varies &mdash; staff will set it at sale time.</div>
+        </div>
+
+        <div class="field">
+          <span class="field-label">Icon</span>
+          <div class="icon-picker" id="pmIconPicker" role="group" aria-label="Choose an icon"></div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="btn btn-quiet" type="button" id="pmCancel">Cancel</button>
+        <button class="btn btn-primary" type="submit">Save product</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ========== Record sale slide-over ========== -->
+<div class="slideover-backdrop" id="salePanel" hidden>
+  <div class="slideover" role="dialog" aria-modal="true" aria-labelledby="salePanelTitle">
+    <div class="slideover-head">
+      <div>
+        <h2 class="modal-title" id="salePanelTitle">Record sale</h2>
+        <div class="section-note">Fill in and confirm &mdash; saved on this device instantly.</div>
+      </div>
+      <button class="icon-btn" type="button" id="salePanelClose" aria-label="Close">&times;</button>
+    </div>
+
+    <form id="saleForm" novalidate style="display:contents">
+      <div class="slideover-body">
+        <div class="sale-product">
+          <span class="sp-icon" id="spIcon" aria-hidden="true">&#128241;</span>
+          <div>
+            <div class="sp-name" id="spName">Product</div>
+            <div class="sp-cat" id="spCat">Category</div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label class="field-label" for="saleQty">Quantity</label>
+            <div class="stepper">
+              <button type="button" id="qtyMinus" aria-label="Decrease quantity">&minus;</button>
+              <input type="number" id="saleQty" value="1" min="1" step="1" inputmode="numeric">
+              <button type="button" id="qtyPlus" aria-label="Increase quantity">+</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="salePrice">Unit price</label>
+            <div class="prefix-input">
+              <span class="prefix" aria-hidden="true">&#8358;</span>
+              <input class="input" type="number" id="salePrice" min="0" step="1" inputmode="decimal" placeholder="0">
+            </div>
+            <span class="field-error" id="salePriceError">Enter a price above zero.</span>
+          </div>
+        </div>
+
+        <label class="field">
+          <span class="field-label" for="saleNote">Note <span class="opt">&mdash; optional</span></span>
+          <input class="input" type="text" id="saleNote" autocomplete="off" placeholder="e.g. blue, 128GB, with case">
+        </label>
+
+        <div class="field">
+          <span class="field-label">Payment</span>
+          <div class="segmented" role="group" aria-label="Payment type">
+            <button class="seg-option" type="button" id="modePaid" data-mode="paid" aria-pressed="true">
+              Paid now
+              <span class="seg-hint">Cash or transfer received</span>
+            </button>
+            <button class="seg-option" type="button" id="modeCredit" data-mode="credit" aria-pressed="false">
+              Pay later
+              <span class="seg-hint">Owed by a customer</span>
+            </button>
+          </div>
+
+          <div class="credit-fields" id="creditFields" hidden>
+            <label class="field">
+              <span class="field-label" for="custName">Customer name</span>
+              <input class="input" type="text" id="custName" autocomplete="off" placeholder="Who is taking this on credit?">
+              <span class="field-error" id="custNameError">A name is required for pay-later sales.</span>
+            </label>
+            <label class="field">
+              <span class="field-label" for="custPhone">Phone <span class="opt">&mdash; optional</span></span>
+              <input class="input" type="tel" id="custPhone" autocomplete="off" placeholder="080&hellip;">
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="slideover-foot">
+        <div class="total-line">
+          <span class="tl-label">Total</span>
+          <span class="tl-value" id="saleTotal">&#8358;0</span>
+        </div>
+        <button class="btn btn-primary btn-lg btn-block" type="submit" id="saleSubmit">Record sale</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
+
+<script src="js/db.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/vendor/supabase.js"></script>
+<script src="js/sync.js"></script>
+<script src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function (err) {
+        console.warn('[sw] registration failed', err);
+      });
+    });
+  }
+</script>
+
+</body>
+</html>
