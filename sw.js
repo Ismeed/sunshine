@@ -3,14 +3,14 @@
 
    Caches only this app's own static files, cache-first on the very first
    load and network-first-with-cache-fallback afterwards. Anything that
-   isn't a same-origin GET (Supabase API calls in particular) is passed
-   straight through untouched - this worker never intercepts or caches
-   cloud requests.
+   isn't a same-origin GET (Firestore/Firebase Auth API calls in
+   particular) is passed straight through untouched - this worker never
+   intercepts or caches cloud requests.
    ========================================================================== */
 
 'use strict';
 
-var CACHE_VERSION = 'sunshine-pos-v2';
+var CACHE_VERSION = 'sunshine-pos-v3';
 
 var APP_SHELL = [
   './',
@@ -23,8 +23,10 @@ var APP_SHELL = [
   'js/analytics.js',
   'js/sync.js',
   'js/install.js',
-  'js/supabase-config.js',
-  'js/vendor/supabase.js',
+  'js/firebase-config.js',
+  'js/vendor/firebase/firebase-app-compat.js',
+  'js/vendor/firebase/firebase-auth-compat.js',
+  'js/vendor/firebase/firebase-firestore-compat.js',
   'icons/icon-192.png',
   'icons/icon-512.png'
 ];
@@ -55,8 +57,8 @@ self.addEventListener('fetch', function (event) {
   var request = event.request;
 
   // Only ever handle same-origin GET requests for our own files. Everything
-  // else (Supabase REST/auth calls, POST/PUT, cross-origin requests) passes
-  // straight through to the network, untouched.
+  // else (Firestore/Firebase Auth calls, POST/PUT, cross-origin requests)
+  // passes straight through to the network, untouched.
   if (request.method !== 'GET') return;
 
   var url = new URL(request.url);

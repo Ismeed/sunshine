@@ -2,9 +2,9 @@
 
 A sales-recording and analytics tool for a small electronics retailer.
 Plain HTML/CSS/JavaScript, no framework, no build step. Works completely
-offline and syncs automatically to a shared Supabase database when the
-connection is available — but Supabase is entirely optional; the app is
-100% functional without it.
+offline and syncs automatically to a shared Firebase Firestore database
+when the connection is available — but Firebase is entirely optional;
+the app is 100% functional without it.
 
 The interface uses one shared design system (`css/styles.css`) with full
 automatic dark mode — it follows the OS/browser `prefers-color-scheme`
@@ -62,32 +62,40 @@ Sync keeps every device — counter tablet, owner's phone, back-office PC
 — converged on the same data. Skip this section entirely if a single
 device is enough; the app works fully without it.
 
-1. Create a free project at [supabase.com](https://supabase.com).
-2. Open **SQL Editor** in the Supabase dashboard, paste the contents of
-   [supabase/schema.sql](supabase/schema.sql), and run it. This creates
-   the `products`, `sales`, and `payments` tables with row-level security
-   enabled and a permissive "any request with the anon key" policy —
-   appropriate for a small trusted-staff tool (see the comment in the
-   schema file for what to tighten later).
-3. In **Project Settings → API**, copy the **Project URL** and the
-   **anon public** key. Never use the `service_role` key here — it must
-   never appear in client-side code.
-4. Open [js/supabase-config.js](js/supabase-config.js) and fill in both
-   fields:
+1. Create a free project at the [Firebase console](https://console.firebase.google.com)
+   (Add project → name it → you can skip Google Analytics, it's not used).
+2. **Build → Firestore Database → Create database.** Start in production
+   mode (the default) and pick any region.
+3. **Build → Authentication → Get started**, then enable the
+   **Anonymous** sign-in provider. Every device signs in anonymously on
+   load purely so Firestore's security rules can require
+   `request.auth != null` instead of allowing fully public access — see
+   the comment in [firebase/firestore.rules](firebase/firestore.rules).
+4. Open Firestore Database → **Rules**, replace the default with the
+   contents of [firebase/firestore.rules](firebase/firestore.rules), and
+   **Publish**.
+5. **Project settings** (gear icon) → General → "Your apps" → **Add app
+   → Web (`</>`)** → register it (Firebase Hosting not needed) → copy the
+   `firebaseConfig` object it shows you.
+6. Open [js/firebase-config.js](js/firebase-config.js) and paste the
+   values in:
    ```js
-   window.SUPABASE_CONFIG = {
-     url: "https://xxxxxxxx.supabase.co",
-     anonKey: "eyJ..."
+   window.FIREBASE_CONFIG = {
+     apiKey: "AIza...",
+     authDomain: "your-project.firebaseapp.com",
+     projectId: "your-project",
+     storageBucket: "your-project.appspot.com",
+     messagingSenderId: "1234567890",
+     appId: "1:1234567890:web:..."
    };
    ```
-5. Reload the app on every device that should sync. The sync pill in the
+7. Reload the app on every device that should sync. The sync pill in the
    top bar shows the current state: *Offline only* (not configured),
    *Offline — will sync* (configured but no connection right now),
    *Syncing…*, or *Synced*.
 
-Sync pushes unsynced records (products, then sales, then payments — that
-order matters, so a payment's `sale_id` never references a sale the
-server hasn't seen yet) roughly every 25 seconds, whenever the browser
+Sync pushes unsynced records (products, then sales, then payments) as
+batched Firestore writes roughly every 25 seconds, whenever the browser
 comes back online, whenever the tab/PWA regains focus after being
 backgrounded (a counter tablet that sleeps and wakes hits this path,
 not just an actual network drop), and right after every local write.
@@ -96,9 +104,12 @@ edit that hasn't been pushed yet is never overwritten by an incoming
 remote record. Hover the sync pill once it reads *Synced* to see the
 exact last-synced time.
 
-The Supabase JS client is vendored into [js/vendor/supabase.js](js/vendor/supabase.js)
-(copied from the npm package's UMD build) rather than loaded from a CDN,
-so the app shell never has a hard network dependency just to load itself.
+The Firebase client is vendored into
+[js/vendor/firebase/](js/vendor/firebase/) (the three "compat" builds —
+app, auth, firestore — fetched once from Firebase's own pinned-version
+distribution and committed as static files) rather than loaded from a
+CDN at runtime, so the app shell never has a hard network dependency
+just to load itself.
 
 ## Admin password
 
@@ -138,7 +149,7 @@ reappears once the app is actually installed (detected via
 Once installed, [sw.js](sw.js) caches the app shell (`css/`, `js/`,
 both HTML pages, the manifest, and the icons) cache-first on install
 and network-first-with-cache-fallback after, so it loads instantly
-offline and a fresh deploy still reaches installed devices. Supabase
+offline and a fresh deploy still reaches installed devices. Firestore
 network requests are never intercepted or cached by the service
 worker — they pass straight through, since they're inherently
 online-only.
@@ -153,12 +164,13 @@ Being upfront about the current limits:
   shop with a handful of devices, but two staff editing the very same
   record at the very same moment can still have one edit quietly lose.
   There's no merge UI.
-- **Shop-wide cloud access, not per-staff** — every device shares one
-  Supabase `anon` key with full read/write access to all tables. There's
-  no login-per-staff-member, no audit trail of who recorded what beyond
-  the `device_id` field already on every sale/payment. Tightening this
-  into real per-staff Supabase Auth policies is a natural next step if
-  the shop grows past "everyone here is trusted."
+- **Shop-wide cloud access, not per-staff** — every device signs in
+  anonymously and gets identical full read/write access to all three
+  collections. There's no login-per-staff-member, no audit trail of who
+  recorded what beyond the `device_id` field already on every
+  sale/payment. Tightening this into real per-staff Firebase Auth
+  (email/password or phone, rules keyed off `request.auth.uid`) is a
+  natural next step if the shop grows past "everyone here is trusted."
 - **One admin password per device** — the hash is stored locally on
   each device's IndexedDB, not synced. Setting the analytics password on
   the counter tablet doesn't set it on the owner's phone; each device
