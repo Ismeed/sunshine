@@ -26,10 +26,10 @@
    ========================================================================== */
 
 window.FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyBSydCYchOOOy0bE56j1-nMLbosg2AqFKc",
+  authDomain: "sunshine-8f335.firebaseapp.com",
+  projectId: "sunshine-8f335",
+  storageBucket: "sunshine-8f335.firebasestorage.app",
+  messagingSenderId: "855217738366",
+  appId: "1:855217738366:web:68c1d491f156c1851e7e2f"
 };
