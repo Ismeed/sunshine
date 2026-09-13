@@ -111,6 +111,59 @@ distribution and committed as static files) rather than loaded from a
 CDN at runtime, so the app shell never has a hard network dependency
 just to load itself.
 
+## Handing a fresh system to a shop
+
+After trialling the app you'll want to clear out test data so the shop
+starts on a genuinely blank slate. Data lives in **two** places and both
+need clearing — and the order matters.
+
+**Why the order matters:** each device keeps its own full copy in
+IndexedDB. If you wipe the cloud while a test device still holds records
+that never successfully synced, that device's next sync pass pushes them
+straight back up and re-pollutes the database you just cleaned.
+
+**1. Clear every device you tested on.** Easiest route, per device:
+
+- Chrome/Edge: `F12` → **Application** tab → **Storage** → **Clear site
+  data**.
+- Or from the browser console on either page:
+  ```js
+  (async () => {
+    for (const store of ['products', 'sales', 'payments', 'settings']) {
+      for (const row of await DB.getAll(store)) {
+        await DB.delete(store, store === 'settings' ? row.key : row.id);
+      }
+    }
+    location.reload();
+  })();
+  ```
+
+This wipes that device's products, sales, payments, its device id, its
+sync bookmarks, and its analytics password hash — a true factory reset
+for that device. Leave the app closed afterwards until step 2 is done.
+
+**2. Wipe the shared cloud database.** From the console on
+`index.html`, once the sync pill reads *Synced*:
+```js
+(async () => {
+  const db = firebase.firestore();
+  for (const col of ['payments', 'sales', 'products']) {
+    const snap = await db.collection(col).get();
+    const batch = db.batch();
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    console.log('cleared', col, snap.size);
+  }
+})();
+```
+Delete in that order (payments → sales → products), the reverse of the
+push order, so nothing is left briefly referencing a row that's already
+gone.
+
+**3. Reopen the app.** The first device to launch re-seeds the six
+starter products and pushes them up, and the analytics screen shows
+"Set an owner password" so the shop chooses their own. That's day one.
+
 ## Admin password
 
 The Analytics screen is gated by a password that's set on first use and
