@@ -176,3 +176,16 @@ Being upfront about the current limits:
   the counter tablet doesn't set it on the owner's phone; each device
   that has its own analytics.html needs its own password set once.
 - **No receipt printing or barcode scanning.**
+- **A brand-new device joining an already-active shop could reset a seed
+  product's price.** The six starter products (`seed-phones`,
+  `seed-laptops`, etc.) use fixed ids specifically so two devices seeding
+  independently before either has synced converge on one shared document
+  instead of creating duplicates. The trade-off: if a shop has already
+  customized one of those starter products' price and *then* onboards a
+  new device, that new device seeds its own fresh (price-unset) copy
+  locally and — if it happens to sync before it's pulled the shop's
+  existing data down first — briefly pushes that unset price over the
+  customized one. In practice this only bites a shop adding devices
+  after already relying on the generic starter products rather than
+  their own; replacing/renaming the starter products early sidesteps it
+  entirely.

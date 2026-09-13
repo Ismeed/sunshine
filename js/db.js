@@ -231,14 +231,22 @@
   /* ----------------------------------------------------------- seed data */
 
   /* default_price 0 is the app-wide convention for "not set - ask at sale
-     time". Every screen that renders or prefills a price honours it. */
+     time". Every screen that renders or prefills a price honours it.
+
+     Seed ids are stable/deterministic ('seed-phones', not a random UUID) on
+     purpose: two devices that both happen to be configured for the first
+     time before either has ever synced would otherwise each generate their
+     own random UUID for "Laptop", "Phone case", etc., and once cloud sync
+     connects both, the shared database ends up with duplicate starter
+     products. A fixed id per category means every device's first-run seed
+     converges on the same document instead of creating a sibling. */
   var SEEDS = [
-    { name: 'Smartphone',        category: 'Phones',        icon: '📱' },
-    { name: 'Laptop',            category: 'Laptops',       icon: '💻' },
-    { name: 'Phone charger',     category: 'Chargers',      icon: '🔌' },
-    { name: 'Screen guard',      category: 'Screen Guards', icon: '🛡️' },
-    { name: 'Bluetooth speaker', category: 'Speakers',      icon: '🔊' },
-    { name: 'Phone case',        category: 'Cases',         icon: '📦' }
+    { id: 'seed-phones',        name: 'Smartphone',        category: 'Phones',        icon: '📱' },
+    { id: 'seed-laptops',       name: 'Laptop',            category: 'Laptops',       icon: '💻' },
+    { id: 'seed-chargers',      name: 'Phone charger',     category: 'Chargers',      icon: '🔌' },
+    { id: 'seed-screen-guards', name: 'Screen guard',      category: 'Screen Guards', icon: '🛡️' },
+    { id: 'seed-speakers',      name: 'Bluetooth speaker', category: 'Speakers',      icon: '🔊' },
+    { id: 'seed-cases',         name: 'Phone case',        category: 'Cases',         icon: '📦' }
   ];
 
   function ensureSeedData() {
@@ -251,7 +259,7 @@
       var ts = nowISO();
       var rows = SEEDS.map(function (seed) {
         return {
-          id: newId(),
+          id: seed.id,
           name: seed.name,
           category: seed.category,
           icon: seed.icon,
