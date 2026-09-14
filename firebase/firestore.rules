@@ -31,6 +31,15 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
 
+    // Append-only stock ledger. Rows are never edited after creation, but
+    // the rules stay a plain read/write gate like the others rather than
+    // trying to enforce immutability here - sync pushes with merge:true and
+    // re-pushes the same row verbatim on retry, which a create-only rule
+    // would reject.
+    match /stock_movements/{movementId} {
+      allow read, write: if request.auth != null;
+    }
+
     // Everything else stays locked - explicit deny by omission.
   }
 }

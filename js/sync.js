@@ -7,9 +7,10 @@
    layer on top of a fully-functional offline app, never a dependency.
 
    Public API is deliberately provider-agnostic (init/runSync/currentState/
-   lastSyncedAt/onStateChange/onPullComplete) so app.js and analytics.js
-   don't know or care that this talks to Firestore rather than anything
-   else - swapping backends again later only means rewriting this file.
+   lastSyncedAt/onStateChange/onPullComplete/onDataChanged) so app.js and
+   analytics.js don't know or care that this talks to Firestore rather than
+   anything else - swapping backends again later only means rewriting this
+   file. (It has already been swapped once, from Supabase.)
    ========================================================================== */
 
 (function (global) {
@@ -21,6 +22,7 @@
 
   var listeners = [];
   var pullListeners = [];
+  var dataChangedListeners = [];
   var currentState = 'no-config';
   var firebaseApp = null;
   var firestore = null;
@@ -54,6 +56,40 @@
     pullListeners.forEach(function (fn) {
       try { fn(); } catch (err) { console.error('[sync] pull listener failed', err); }
     });
+  }
+
+  /* Fires only when a pull actually wrote rows into IndexedDB - not on every
+     tick. onPullComplete above fires after every successful pass, which means
+     a subscriber that rebuilds the DOM does so every 25 seconds forever even
+     when nothing changed. Screens should prefer this one. */
+  function onDataChanged(fn) {
+    if (typeof fn === 'function') dataChangedListeners.push(fn);
+  }
+
+  function notifyDataChanged(counts) {
+    dataChangedListeners.forEach(function (fn) {
+      try { fn(counts); } catch (err) { console.error('[sync] data-changed listener failed', err); }
+    });
+  }
+
+  /* Runs `fn` for every table, isolating failures: one table going wrong no
+     longer abandons the tables after it in the chain. That matters most for
+     a collection the Firestore rules haven't been updated for yet - without
+     isolation, a single denied collection takes down sync for everything.
+     Resolves with the list of failures so the caller can still report an
+     unhealthy pass. */
+  function forEachTable(fn) {
+    var failures = [];
+    return TABLES.reduce(function (chainPromise, table) {
+      return chainPromise.then(function () {
+        return Promise.resolve()
+          .then(function () { return fn(table); })
+          .catch(function (err) {
+            console.error('[sync] ' + table + ' failed; continuing with other tables', err);
+            failures.push({ table: table, error: err });
+          });
+      });
+    }, Promise.resolve()).then(function () { return failures; });
   }
 
   /* ----------------------------------------------------------- config */
@@ -155,13 +191,12 @@
   }
 
   function pushAll() {
-    // Sequential and in the same order as before - products, then sales,
-    // then payments. Firestore has no foreign keys to violate, but keeping
+    // Sequential and in dependency order - products, sales, payments, then
+    // stock_movements. Firestore has no foreign keys to violate, but keeping
     // the order means a sale a device sees remotely always has its product
-    // context available too, and payments never arrive detached from sales.
-    return TABLES.reduce(function (chainPromise, table) {
-      return chainPromise.then(function () { return pushTable(table); });
-    }, Promise.resolve());
+    // context available too, payments never arrive detached from sales, and
+    // a movement never arrives before the product or sale it points at.
+    return forEachTable(pushTable);
   }
 
   /* -------------------------------------------------------------- pull */
@@ -177,7 +212,7 @@
       if (since) query = query.where('updated_at', '>', since);
 
       return query.get().then(function (snapshot) {
-        if (snapshot.empty) return;
+        if (snapshot.empty) return 0;
 
         var rows = snapshot.docs.map(function (doc) {
           var data = doc.data();
@@ -185,30 +220,41 @@
           return data;
         });
 
+        // Resolves 1 per row actually written, 0 per row skipped, so the
+        // caller can tell "the server had newer data" from "we re-read rows
+        // we already had". Only the former should wake up the screens.
         return Promise.all(rows.map(function (remote) {
           return global.DB.get(table, remote.id).then(function (local) {
             // Never let an incoming remote record clobber a local edit that
             // hasn't been pushed yet - local wins until it's synced.
-            if (local && local.synced === false) return;
+            if (local && local.synced === false) return 0;
 
             // Otherwise, last-write-wins by updated_at.
-            if (local && new Date(local.updated_at) >= new Date(remote.updated_at)) return;
+            if (local && new Date(local.updated_at) >= new Date(remote.updated_at)) return 0;
 
             var merged = Object.assign({}, remote, { synced: true });
-            return global.DB.put(table, merged);
+            return global.DB.put(table, merged).then(function () { return 1; });
           });
-        })).then(function () {
+        })).then(function (written) {
+          var changed = written.reduce(function (sum, n) { return sum + n; }, 0);
           var latest = rows[rows.length - 1].updated_at;
-          return global.DB.setSetting(pullSinceKey(table), latest);
+          return global.DB.setSetting(pullSinceKey(table), latest).then(function () {
+            return changed;
+          });
         });
       });
     });
   }
 
+  /* Resolves { failures, changed } - changed being the number of rows this
+     pull actually wrote locally, across all tables. */
   function pullAll() {
-    return TABLES.reduce(function (chainPromise, table) {
-      return chainPromise.then(function () { return pullTable(table); });
-    }, Promise.resolve());
+    var changed = 0;
+    return forEachTable(function (table) {
+      return pullTable(table).then(function (n) { changed += (n || 0); });
+    }).then(function (failures) {
+      return { failures: failures, changed: changed };
+    });
   }
 
   /* A stuck network call (bad authDomain, a captive portal, a transient
@@ -247,10 +293,30 @@
     setState('online-syncing');
 
     return withTimeout(
-      ensureAuth().then(pushAll).then(pullAll),
+      ensureAuth()
+        .then(pushAll)
+        .then(function (pushFailures) {
+          return pullAll().then(function (pull) {
+            return { failures: pushFailures.concat(pull.failures), changed: pull.changed };
+          });
+        }),
       SYNC_TIMEOUT_MS
     )
-      .then(function () {
+      .then(function (result) {
+        if (result.changed > 0) notifyDataChanged(result.changed);
+
+        if (result.failures.length) {
+          // Some tables synced, some didn't. There's no "partially synced"
+          // pill state, and claiming "Synced" while a collection is silently
+          // failing would be the more harmful lie - so report the pass as
+          // unhealthy. The isolation above still did its job: every other
+          // table's data got through instead of being abandoned mid-chain.
+          console.warn('[sync] pass completed with ' + result.failures.length +
+            ' failing table(s): ' + result.failures.map(function (f) { return f.table; }).join(', '));
+          setState('offline');
+          return;
+        }
+
         lastSyncedAt = new Date();
         setState('online-synced');
         notifyPullComplete();
@@ -305,6 +371,7 @@
     currentState: function () { return currentState; },
     lastSyncedAt: function () { return lastSyncedAt; },
     onStateChange: onStateChange,
-    onPullComplete: onPullComplete
+    onPullComplete: onPullComplete,
+    onDataChanged: onDataChanged
   };
 })(window);

@@ -9,7 +9,20 @@
   'use strict';
 
   var DB_NAME = 'sunshine_pos_db';
-  var DB_VERSION = 1;
+
+  /* Bump this whenever STORES gains a store or an index. onupgradeneeded
+     only fires when the requested version exceeds the one already stored on
+     the device, so shipping a new store without bumping means every device
+     that already has this database - i.e. every device already in the shop's
+     hands - silently never receives it, and every call against it throws.
+     v2 added: stock_movements. */
+  var DB_VERSION = 2;
+
+  /* Fallback low-stock threshold for products that don't set their own
+     (product.low_stock_threshold is nullable and means "use this"). */
+  var LOW_STOCK_DEFAULT = 5;
+
+  var MOVEMENT_TYPES = ['initial', 'restock', 'sale', 'adjustment'];
 
   /* Store definitions. Note on the `synced` indexes: IndexedDB keys may not
      be booleans, so an index over a boolean field indexes nothing. We still
@@ -30,14 +43,27 @@
       keyPath: 'id',
       indexes: ['sale_id', 'synced']
     },
+    /* Append-only stock ledger. Rows are never edited after creation, so
+       updated_at always equals created_at. Stock on hand is derived by
+       summing quantity_delta - deliberately never stored as a mutable
+       counter on the product, because a counter is last-write-wins state
+       and two offline devices would silently overwrite each other's count.
+       Summation is order-independent and every row upserts idempotently by
+       its own id, so the total is correct no matter what order rows sync
+       in or how long a device stayed offline. */
+    stock_movements: {
+      keyPath: 'id',
+      indexes: ['product_id', 'synced', 'created_at']
+    },
     settings: {
       keyPath: 'key',
       indexes: []
     }
   };
 
-  /* Tables that participate in cloud sync, in foreign-key-safe push order. */
-  var SYNCED_STORES = ['products', 'sales', 'payments'];
+  /* Tables that participate in cloud sync, in dependency-safe push order:
+     movements can reference both a product and a sale, so they go last. */
+  var SYNCED_STORES = ['products', 'sales', 'payments', 'stock_movements'];
 
   var dbPromise = null;
 
@@ -228,6 +254,78 @@
     return deviceIdPromise;
   }
 
+  /* --------------------------------------------------------- stock ledger */
+
+  /* Derives stock on hand for every product that has any movement history.
+     Returns a Map keyed by product_id: { tracked: true, onHand: <signed> }.
+
+     A product with NO movements is deliberately absent from the map rather
+     than present with tracked:false - absence is what "untracked" means, and
+     this helper only reads the movements store, so it has no product list to
+     enumerate. Callers should treat a missing entry as untracked:
+
+       var level = levels.get(product.id);
+       var tracked = !!level;             // untracked -> sells as it always has
+       var onHand = tracked ? level.onHand : null;
+
+     onHand is NOT clamped at zero. A negative total is real information - it
+     means more units were sold than were ever stocked, which genuinely can
+     happen when two offline devices both sell the last unit before either
+     syncs. Clamp for display only; never hide it in the data. */
+  function getStockLevels() {
+    var levels = new Map();
+    return transact('stock_movements', 'readonly', function (store) {
+      store.openCursor().onsuccess = function (event) {
+        var cursor = event.target.result;
+        if (!cursor) return;
+        var row = cursor.value;
+        if (row && row.product_id) {
+          var entry = levels.get(row.product_id);
+          if (!entry) {
+            entry = { tracked: true, onHand: 0 };
+            levels.set(row.product_id, entry);
+          }
+          entry.onHand += Number(row.quantity_delta) || 0;
+        }
+        cursor.continue();
+      };
+    }).then(function () { return levels; });
+  }
+
+  /* Appends one movement row. Never updates an existing row - that's the
+     whole point of the ledger. */
+  function recordStockMovement(input) {
+    if (!input || !input.product_id) {
+      return Promise.reject(new Error('recordStockMovement: product_id is required'));
+    }
+    if (MOVEMENT_TYPES.indexOf(input.type) === -1) {
+      return Promise.reject(new Error(
+        'recordStockMovement: type must be one of ' + MOVEMENT_TYPES.join(', ')
+      ));
+    }
+    var delta = Number(input.quantity_delta);
+    if (!isFinite(delta) || delta === 0) {
+      return Promise.reject(new Error('recordStockMovement: quantity_delta must be a non-zero number'));
+    }
+
+    return getDeviceId().then(function (deviceId) {
+      var ts = nowISO();
+      var row = {
+        id: newId(),
+        product_id: input.product_id,
+        type: input.type,
+        quantity_delta: delta,
+        note: input.note || '',
+        related_sale_id: input.related_sale_id || null,
+        created_at: ts,
+        updated_at: ts, // never edited after creation - always equals created_at
+        synced: false,
+        device_id: deviceId
+      };
+      return put('stock_movements', row).then(function () { return row; });
+    });
+  }
+
   /* ----------------------------------------------------------- seed data */
 
   /* default_price 0 is the app-wide convention for "not set - ask at sale
@@ -264,6 +362,7 @@
           category: seed.category,
           icon: seed.icon,
           default_price: 0,
+          low_stock_threshold: null, // null = fall back to LOW_STOCK_DEFAULT
           deleted: false,
           created_at: ts,
           updated_at: ts,
@@ -283,6 +382,8 @@
     NAME: DB_NAME,
     VERSION: DB_VERSION,
     SYNCED_STORES: SYNCED_STORES,
+    LOW_STOCK_DEFAULT: LOW_STOCK_DEFAULT,
+    MOVEMENT_TYPES: MOVEMENT_TYPES,
 
     open: open,
     getAll: getAll,
@@ -297,6 +398,9 @@
     newId: newId,
     nowISO: nowISO,
     getDeviceId: getDeviceId,
-    ensureSeedData: ensureSeedData
+    ensureSeedData: ensureSeedData,
+
+    getStockLevels: getStockLevels,
+    recordStockMovement: recordStockMovement
   };
 })(window);
