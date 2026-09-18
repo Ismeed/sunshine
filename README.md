@@ -10,6 +10,22 @@ The interface uses one shared design system (`css/styles.css`) with full
 automatic dark mode — it follows the OS/browser `prefers-color-scheme`
 setting on both screens, no toggle needed.
 
+## How this was built
+
+The phase-by-phase build plans live in [docs/](docs/) and are kept in sync
+with the code:
+
+- [docs/build-plan.md](docs/build-plan.md) — the original eight-phase build
+  (scaffolding, data layer, both screens, cloud sync, PWA, QA).
+- [docs/inventory-plan.md](docs/inventory-plan.md) — the inventory/stock
+  ledger and analytics upgrade.
+
+Both are written for the live backend (Firebase Firestore). The project
+launched on Supabase and moved after a free-tier project cap blocked
+provisioning; the plans were rewritten rather than left carrying
+substitute-this-yourself caveats, since a doc that contradicts itself
+halfway through can't be re-run.
+
 ## The two screens
 
 - **Sales** ([index.html](index.html)) — counter staff. Browse and search
