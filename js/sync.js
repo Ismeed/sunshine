@@ -167,26 +167,73 @@
     return out;
   }
 
-  function pushTable(table) {
-    return global.DB.getUnsynced(table).then(function (rows) {
-      if (!rows.length) return;
-      var db = getFirestore();
+  function markSynced(table, rows) {
+    return Promise.all(rows.map(function (row) {
+      return global.DB.put(table, Object.assign({}, row, { synced: true }));
+    }));
+  }
 
-      return chunk(rows, BATCH_LIMIT).reduce(function (chainPromise, rowChunk) {
-        return chainPromise.then(function () {
-          var batch = db.batch();
-          rowChunk.forEach(function (row) {
-            batch.set(db.collection(table).doc(row.id), toRemoteRow(row), { merge: true });
-          });
+  /* Seed products are written locally by every fresh device at price 0, so
+     pushing them with set(merge:true) would reset whatever prices the shop
+     has actually configured - once per new device or cleared browser
+     profile. They go up create-if-absent instead: if the cloud already has
+     the row, leave it completely alone.
 
-          return batch.commit().then(function () {
-            // Only flip the local flag once the server has confirmed the write.
-            return Promise.all(rowChunk.map(function (row) {
-              return global.DB.put(table, Object.assign({}, row, { synced: true }));
-            }));
+     Note this can't use DocumentReference.create(), which exists in the
+     Node Admin SDK but not the web client SDK - hence the transaction.
+
+     This is only half the fix. The other half is DB.SEED_TIMESTAMP: because
+     a seed's updated_at is epoch, the pull that follows always considers
+     the cloud row newer and corrects this device's price-0 placeholder.
+     Without that, the local copy would win last-write-wins and the device
+     would sit on the wrong price forever. */
+  function pushSeedRows(db, table, rows) {
+    return rows.reduce(function (chainPromise, row) {
+      return chainPromise.then(function () {
+        var ref = db.collection(table).doc(row.id);
+        return db.runTransaction(function (tx) {
+          return tx.get(ref).then(function (snap) {
+            if (snap.exists) return; // shop's data wins, untouched
+            tx.set(ref, toRemoteRow(row));
           });
         });
-      }, Promise.resolve());
+      });
+    }, Promise.resolve()).then(function () {
+      // Either we created it or the cloud already had it. Both mean this
+      // device has nothing left to push; the pull will reconcile the values.
+      return markSynced(table, rows);
+    });
+  }
+
+  function pushTable(table) {
+    return global.DB.getUnsynced(table).then(function (allRows) {
+      if (!allRows.length) return;
+      var db = getFirestore();
+
+      var seedRows = [];
+      var rows = [];
+      allRows.forEach(function (row) {
+        if (table === 'products' && global.DB.isPristineSeed(row)) seedRows.push(row);
+        else rows.push(row);
+      });
+
+      return pushSeedRows(db, table, seedRows).then(function () {
+        if (!rows.length) return;
+
+        return chunk(rows, BATCH_LIMIT).reduce(function (chainPromise, rowChunk) {
+          return chainPromise.then(function () {
+            var batch = db.batch();
+            rowChunk.forEach(function (row) {
+              batch.set(db.collection(table).doc(row.id), toRemoteRow(row), { merge: true });
+            });
+
+            // Only flip the local flag once the server has confirmed the write.
+            return batch.commit().then(function () {
+              return markSynced(table, rowChunk);
+            });
+          });
+        }, Promise.resolve());
+      });
     });
   }
 

@@ -222,6 +222,31 @@ ends up with visible duplicate "Laptop" and "Phone case" tiles. A
 fixed id per category makes every device's first-run seed converge
 on the same document instead of creating a sibling.
 
+Stable ids alone are only half of this, and shipping that half on
+its own creates a worse bug than the one it fixes. Converging on the
+same document id means a fresh device's price-0 placeholder now
+lands on top of the shop's real row instead of beside it — so every
+new device or cleared browser profile silently resets the prices
+staff have configured. Two more things are needed:
+
+- Push seed rows create-if-absent, not set(merge:true): if the cloud
+  already holds that document, leave it completely alone. Note this
+  can't use DocumentReference.create() — that's in the Node Admin
+  SDK, not the web client SDK — so use a transaction that reads the
+  doc and only writes when it doesn't exist.
+- Stamp seed rows with a fixed epoch timestamp for created_at and
+  updated_at rather than "now". Otherwise the local placeholder is
+  the most recently written copy, wins last-write-wins on the next
+  pull, and the device sits on price 0 forever even though the cloud
+  has the right value. With an epoch stamp any real row is newer, so
+  the pull corrects the placeholder.
+
+That timestamp doubles as the "never edited" marker, so detecting a
+pristine seed needs no extra flag that a future write path could
+forget to clear: a seed stops being pristine the moment any genuine
+edit stamps a real updated_at, at which point it should push
+normally like any other row.
+
 This phase has no visible UI. Verify it by having me open the
 browser console on index.html and run a few calls against `DB`
 directly — walk me through that quick manual check.

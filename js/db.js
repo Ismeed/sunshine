@@ -24,6 +24,20 @@
 
   var MOVEMENT_TYPES = ['initial', 'restock', 'sale', 'adjustment'];
 
+  /* Seed rows are stamped with this instead of the current time, and it does
+     two jobs.
+
+     1. It makes any real row beat a seed on last-write-wins, so a fresh
+        device's placeholder copy is always corrected by the shop's actual
+        data on the next pull rather than winning because it was written
+        seconds ago.
+     2. It doubles as the "never been edited" marker - see isPristineSeed()
+        below - with no extra flag to keep in sync.
+
+     A seed is a local default, not an event that happened at a point in
+     time, so an epoch timestamp is honest rather than a hack. */
+  var SEED_TIMESTAMP = '1970-01-01T00:00:00.000Z';
+
   /* Store definitions. Note on the `synced` indexes: IndexedDB keys may not
      be booleans, so an index over a boolean field indexes nothing. We still
      declare it because the schema calls for it (and it costs nothing), but
@@ -347,6 +361,18 @@
     { id: 'seed-cases',         name: 'Phone case',        category: 'Cases',         icon: '📦' }
   ];
 
+  var SEED_IDS = SEEDS.map(function (s) { return s.id; });
+
+  /* True while a seed row is still exactly as ensureSeedData() wrote it.
+     Any genuine edit stamps a real updated_at, which both ends this and
+     makes the row push normally. Nothing to remember to clear, so no future
+     write path can forget to. */
+  function isPristineSeed(row) {
+    return !!row &&
+           SEED_IDS.indexOf(row.id) !== -1 &&
+           row.updated_at === SEED_TIMESTAMP;
+  }
+
   function ensureSeedData() {
     var existing = 0;
     return transact('products', 'readonly', function (store) {
@@ -354,7 +380,6 @@
     }).then(function () {
       if (existing > 0) return { seeded: false, count: existing };
 
-      var ts = nowISO();
       var rows = SEEDS.map(function (seed) {
         return {
           id: seed.id,
@@ -364,8 +389,8 @@
           default_price: 0,
           low_stock_threshold: null, // null = fall back to LOW_STOCK_DEFAULT
           deleted: false,
-          created_at: ts,
-          updated_at: ts,
+          created_at: SEED_TIMESTAMP,
+          updated_at: SEED_TIMESTAMP,
           synced: false
         };
       });
@@ -384,6 +409,8 @@
     SYNCED_STORES: SYNCED_STORES,
     LOW_STOCK_DEFAULT: LOW_STOCK_DEFAULT,
     MOVEMENT_TYPES: MOVEMENT_TYPES,
+    SEED_TIMESTAMP: SEED_TIMESTAMP,
+    isPristineSeed: isPristineSeed,
 
     open: open,
     getAll: getAll,
