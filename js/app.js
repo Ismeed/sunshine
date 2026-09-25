@@ -45,6 +45,16 @@
     pmIconPicker:      doc.getElementById('pmIconPicker'),
     pmCancel:          doc.getElementById('pmCancel'),
     pmSubmit:          doc.getElementById('pmSubmit'),
+    productModalTitle: doc.getElementById('productModalTitle'),
+    pmCategoryField:   doc.getElementById('pmCategoryField'),
+    pmStartingStockField: doc.getElementById('pmStartingStockField'),
+    pmStartingStockNote:  doc.getElementById('pmStartingStockNote'),
+    pmFoot:            doc.getElementById('pmFoot'),
+    pmDelete:          doc.getElementById('pmDelete'),
+    pmDeleteConfirm:   doc.getElementById('pmDeleteConfirm'),
+    pmDeleteMsg:       doc.getElementById('pmDeleteMsg'),
+    pmDeleteCancel:    doc.getElementById('pmDeleteCancel'),
+    pmDeleteYes:       doc.getElementById('pmDeleteYes'),
 
     salePanel:      doc.getElementById('salePanel'),
     salePanelClose: doc.getElementById('salePanelClose'),
@@ -94,6 +104,7 @@
     search: '',
     activeProduct: null,
     stockProduct: null,
+    editingProduct: null,
     paymentMode: 'paid',
     selectedIcon: '📦',
     deviceId: null,
@@ -325,13 +336,24 @@
       main.addEventListener('click', function () { openSalePanel(p, main); });
       container.appendChild(main);
 
-      // A second, sibling button - not nested inside `main` - since a
-      // <button> can't contain another <button>.
-      var stockBtn = node('button', 'tile-stock-btn', '+ Stock');
+      // Sibling buttons - not nested inside `main` - since a <button>
+      // can't contain another <button>. Each gets an accessible name that
+      // includes the product, so they're distinguishable out of context.
+      var actions = node('div', 'tile-actions');
+
+      var stockBtn = node('button', 'tile-action-btn tile-stock-btn', '+ Stock');
       stockBtn.type = 'button';
       stockBtn.setAttribute('aria-label', 'Add stock to ' + p.name);
       stockBtn.addEventListener('click', function () { openStockModal(p, stockBtn); });
-      container.appendChild(stockBtn);
+      actions.appendChild(stockBtn);
+
+      var editBtn = node('button', 'tile-action-btn tile-edit-btn', 'Edit');
+      editBtn.type = 'button';
+      editBtn.setAttribute('aria-label', 'Edit ' + p.name);
+      editBtn.addEventListener('click', function () { openEditProduct(p, editBtn); });
+      actions.appendChild(editBtn);
+
+      container.appendChild(actions);
 
       el.productGrid.appendChild(container);
     });
@@ -424,11 +446,49 @@
     if (isNew) el.pmNewCategory.focus();
   }
 
+  /* The same modal serves both jobs. Create shows category and starting
+     stock; edit hides both - a product's category is baked into the sales
+     already recorded against it, and "starting stock" only means anything
+     once, at creation (use "+ Stock" afterwards). */
+  function setProductModalMode(product) {
+    var editing = !!product;
+    state.editingProduct = product || null;
+
+    el.productModalTitle.textContent = editing ? 'Edit product' : 'New product';
+    el.pmSubmit.textContent = editing ? 'Save changes' : 'Save product';
+    el.pmCategoryField.hidden = editing;
+    el.pmStartingStockField.hidden = editing;
+    el.pmStartingStockNote.hidden = editing;
+    el.pmDelete.hidden = !editing;
+    el.pmFoot.hidden = false;
+    el.pmDeleteConfirm.hidden = true;
+  }
+
   function openProductModal() {
     state.lastFocus = doc.activeElement;
     state.selectedIcon = '📦';
     el.productForm.reset();
     clearErrors(el.productModal);
+    setProductModalMode(null);
+    renderCategorySelect();
+    renderIconPicker();
+    el.productModal.hidden = false;
+    el.pmName.focus();
+  }
+
+  function openEditProduct(product, sourceEl) {
+    state.lastFocus = sourceEl || doc.activeElement;
+    el.productForm.reset();
+    clearErrors(el.productModal);
+    setProductModalMode(product);
+
+    state.selectedIcon = product.icon || '📦';
+    el.pmName.value = product.name || '';
+    var price = Number(product.default_price) || 0;
+    el.pmPrice.value = price > 0 ? String(price) : '';
+    el.pmLowStockThreshold.value =
+      (product.low_stock_threshold != null) ? String(product.low_stock_threshold) : '';
+
     renderCategorySelect();
     renderIconPicker();
     el.productModal.hidden = false;
@@ -437,6 +497,9 @@
 
   function closeProductModal() {
     el.productModal.hidden = true;
+    state.editingProduct = null;
+    el.pmDeleteConfirm.hidden = true;
+    el.pmFoot.hidden = false;
     if (state.lastFocus && state.lastFocus.focus) state.lastFocus.focus();
   }
 
@@ -444,12 +507,18 @@
     event.preventDefault();
     clearErrors(el.productModal);
 
+    var editing = state.editingProduct;
     var name = el.pmName.value.trim();
-    var isNewCat = el.pmCategory.value === NEW_CATEGORY;
-    var category = isNewCat ? el.pmNewCategory.value.trim() : el.pmCategory.value;
+    // Category is fixed once a product exists, so in edit mode it isn't
+    // asked for and isn't re-validated - the existing value carries over.
+    var isNewCat = !editing && el.pmCategory.value === NEW_CATEGORY;
+    var category = editing
+      ? editing.category
+      : (isNewCat ? el.pmNewCategory.value.trim() : el.pmCategory.value);
     var priceRaw = el.pmPrice.value.trim();
     var price = priceRaw === '' ? 0 : Number(priceRaw);
-    var stockRaw = el.pmStartingStock.value.trim();
+    // Starting stock only applies at creation; editing never re-applies it.
+    var stockRaw = editing ? '' : el.pmStartingStock.value.trim();
     var startingStock = stockRaw === '' ? 0 : Number(stockRaw);
     var thresholdRaw = el.pmLowStockThreshold.value.trim();
     var threshold = thresholdRaw === '' ? null : Number(thresholdRaw);
@@ -478,18 +547,31 @@
     if (!ok) return;
 
     var ts = DB.nowISO();
-    var product = {
-      id: DB.newId(),
-      name: name,
-      category: category,
-      icon: state.selectedIcon,
-      default_price: price,
-      low_stock_threshold: threshold,
-      deleted: false,
-      created_at: ts,
-      updated_at: ts,
-      synced: false
-    };
+
+    // An edit keeps the row's identity and history and only restamps
+    // updated_at, so last-write-wins resolves it correctly against other
+    // devices. A create makes a brand new row.
+    var product = editing
+      ? Object.assign({}, editing, {
+          name: name,
+          icon: state.selectedIcon,
+          default_price: price,
+          low_stock_threshold: threshold,
+          updated_at: ts,
+          synced: false
+        })
+      : {
+          id: DB.newId(),
+          name: name,
+          category: category,
+          icon: state.selectedIcon,
+          default_price: price,
+          low_stock_threshold: threshold,
+          deleted: false,
+          created_at: ts,
+          updated_at: ts,
+          synced: false
+        };
 
     // Lock before any async work - a double-tap would otherwise create two
     // separate products with the same name and two separate stock ledgers.
@@ -510,7 +592,7 @@
         : null;
     }).then(function () {
       closeProductModal();
-      toast('Added ' + product.name);
+      toast(editing ? 'Updated ' + product.name : 'Added ' + product.name);
       nudgeSync();
       return refresh();
     }).catch(function (err) {
@@ -519,6 +601,38 @@
     }).then(function () {
       busy.product = false;
       el.pmSubmit.disabled = false;
+    });
+  }
+
+  /* Soft delete: flips the `deleted` flag rather than removing the row, so
+     the record still syncs (a hard delete would simply fail to propagate -
+     other devices would never learn it was gone and would push it back),
+     and every sale already recorded against the product keeps its history
+     and keeps counting toward revenue. */
+  function deleteProduct() {
+    var product = state.editingProduct;
+    if (!product) return;
+    if (busy.product) return;
+    busy.product = true;
+    el.pmDeleteYes.disabled = true;
+
+    var updated = Object.assign({}, product, {
+      deleted: true,
+      updated_at: DB.nowISO(),
+      synced: false
+    });
+
+    DB.put('products', updated).then(function () {
+      closeProductModal();
+      toast('Deleted ' + product.name);
+      nudgeSync();
+      return refresh();
+    }).catch(function (err) {
+      console.error('[app] could not delete product', err);
+      toast('Could not delete that product', 'error');
+    }).then(function () {
+      busy.product = false;
+      el.pmDeleteYes.disabled = false;
     });
   }
 
@@ -779,6 +893,22 @@
     el.newProductBtn.addEventListener('click', openProductModal);
     el.productModalClose.addEventListener('click', closeProductModal);
     el.pmCancel.addEventListener('click', closeProductModal);
+
+    el.pmDelete.addEventListener('click', function () {
+      var p = state.editingProduct;
+      el.pmDeleteMsg.textContent = p
+        ? 'Delete ' + p.name + '? Sales already recorded against it are kept.'
+        : 'Delete this product? Past sales are kept.';
+      el.pmFoot.hidden = true;
+      el.pmDeleteConfirm.hidden = false;
+      el.pmDeleteCancel.focus();
+    });
+    el.pmDeleteCancel.addEventListener('click', function () {
+      el.pmDeleteConfirm.hidden = true;
+      el.pmFoot.hidden = false;
+      el.pmDelete.focus();
+    });
+    el.pmDeleteYes.addEventListener('click', deleteProduct);
     el.pmCategory.addEventListener('change', onCategoryChange);
     el.productForm.addEventListener('submit', submitProduct);
     el.productModal.addEventListener('mousedown', function (e) {

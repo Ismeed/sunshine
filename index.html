@@ -106,7 +106,7 @@
           <span class="field-error" id="pmNameError">Give the product a name.</span>
         </label>
 
-        <div class="field">
+        <div class="field" id="pmCategoryField">
           <label class="field-label" for="pmCategory">Category</label>
           <select class="select" id="pmCategory"></select>
           <div id="pmNewCategoryWrap" hidden style="margin-top:8px">
@@ -127,7 +127,7 @@
         </div>
 
         <div class="field-row">
-          <label class="field" style="margin-bottom:4px">
+          <label class="field" style="margin-bottom:4px" id="pmStartingStockField">
             <span class="field-label" for="pmStartingStock">Starting stock <span class="opt">&mdash; optional</span></span>
             <input class="input" type="number" id="pmStartingStock" min="0" step="1" inputmode="numeric" placeholder="0">
             <span class="field-error" id="pmStartingStockError">Enter a whole number, 0 or more.</span>
@@ -139,7 +139,7 @@
             <span class="field-error" id="pmLowStockThresholdError">Enter a whole number, 0 or more.</span>
           </label>
         </div>
-        <div class="section-note" style="margin-bottom:14px">Leave starting stock blank to skip stock tracking for this product &mdash; it'll sell exactly as it does today, with no stock count shown.</div>
+        <div class="section-note" style="margin-bottom:14px" id="pmStartingStockNote">Leave starting stock blank to skip stock tracking for this product &mdash; it'll sell exactly as it does today, with no stock count shown.</div>
 
         <div class="field">
           <span class="field-label">Icon</span>
@@ -147,9 +147,18 @@
         </div>
       </div>
 
-      <div class="modal-foot">
+      <div class="modal-foot" id="pmFoot">
+        <button class="btn btn-danger foot-left" type="button" id="pmDelete" hidden>Delete</button>
         <button class="btn btn-quiet" type="button" id="pmCancel">Cancel</button>
         <button class="btn btn-primary" type="submit" id="pmSubmit">Save product</button>
+      </div>
+
+      <!-- Two-step confirm, inline. The brief rules out browser alert()/
+           confirm() dialogs, and deleting a product shouldn't be one tap. -->
+      <div class="modal-foot modal-foot-confirm" id="pmDeleteConfirm" hidden>
+        <span class="section-note foot-left" id="pmDeleteMsg">Hide this product? Past sales are kept.</span>
+        <button class="btn btn-quiet" type="button" id="pmDeleteCancel">Keep it</button>
+        <button class="btn btn-danger" type="button" id="pmDeleteYes">Yes, delete</button>
       </div>
     </form>
   </div>

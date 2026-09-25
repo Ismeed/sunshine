@@ -1061,11 +1061,17 @@ img, svg { display: block; max-width: 100%; }
 }
 .tile-stock-badge { margin-top: 7px; align-self: flex-start; }
 
-.tile-stock-btn {
-  width: 100%;
-  padding: 7px 13px;
-  border: 0;
+/* Footer actions sit as siblings of .tile-main, never nested inside it. */
+.tile-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   border-top: 1px solid var(--line);
+}
+
+.tile-action-btn {
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
   background: var(--surface-sunk);
   font-size: var(--fs-xs);
   font-weight: 650;
@@ -1073,7 +1079,15 @@ img, svg { display: block; max-width: 100%; }
   text-align: center;
   transition: background var(--t-fast), color var(--t-fast);
 }
-.tile-stock-btn:hover { background: var(--gold-wash); color: var(--gold-dark); }
+.tile-action-btn + .tile-action-btn { border-left: 1px solid var(--line); }
+.tile-action-btn:hover { background: var(--gold-wash); color: var(--gold-dark); }
+
+/* Pushes an item to the far left of a flex footer, so Delete sits away
+   from Cancel/Save rather than adjacent to them. */
+.foot-left { margin-right: auto; }
+
+.modal-foot-confirm { align-items: center; }
+.modal-foot-confirm .section-note { text-align: left; max-width: 46%; }
 
 /* --- icon picker ------------------------------------------------------- */
 

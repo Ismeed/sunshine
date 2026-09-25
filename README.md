@@ -10,6 +10,10 @@ The interface uses one shared design system (`css/styles.css`) with full
 automatic dark mode — it follows the OS/browser `prefers-color-scheme`
 setting on both screens, no toggle needed.
 
+**Handing this to the shop?** [docs/handover.md](docs/handover.md) is the
+plain-language guide for staff and the owner — no technical knowledge
+assumed. Everything below this line is for whoever maintains the code.
+
 ## How this was built
 
 The phase-by-phase build plans live in [docs/](docs/) and are kept in sync
@@ -29,9 +33,21 @@ halfway through can't be re-run.
 ## The two screens
 
 - **Sales** ([index.html](index.html)) — counter staff. Browse and search
-  products, add new products on the fly, and record a sale as *Paid now*
-  or *Pay later*. Pay-later sales capture a customer name (required) and
-  phone (optional) and track a running balance.
+  products, add new products on the fly, restock them, edit or delete
+  them, and record a sale as *Paid now* or *Pay later*. Pay-later sales
+  capture a customer name (required) and phone (optional) and track a
+  running balance.
+
+  Each product tile has two actions: **+ Stock** to record units received,
+  and **Edit** to change the name, price, low-stock threshold or icon —
+  or to delete the product. Deleting is a *soft* delete: the record is
+  flagged rather than removed, so the deletion syncs to the other devices
+  (a hard delete would simply never propagate — other devices would never
+  learn it was gone and would push it straight back), and every sale
+  already recorded against that product keeps its history and keeps
+  counting toward revenue. A product's category is fixed once created,
+  since sales already recorded against it carry the category they were
+  sold under.
 - **Analytics** ([analytics.html](analytics.html)) — the owner, behind
   its own password, completely separate from the sales screen. Revenue
   and transaction counts by date range, a 30-day sales trend, top products,
