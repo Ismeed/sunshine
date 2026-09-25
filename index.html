@@ -126,6 +126,21 @@
           <div class="section-note" style="margin-top:5px">Leave blank if the price varies &mdash; staff will set it at sale time.</div>
         </div>
 
+        <div class="field-row">
+          <label class="field" style="margin-bottom:4px">
+            <span class="field-label" for="pmStartingStock">Starting stock <span class="opt">&mdash; optional</span></span>
+            <input class="input" type="number" id="pmStartingStock" min="0" step="1" inputmode="numeric" placeholder="0">
+            <span class="field-error" id="pmStartingStockError">Enter a whole number, 0 or more.</span>
+          </label>
+
+          <label class="field" style="margin-bottom:4px">
+            <span class="field-label" for="pmLowStockThreshold">Low stock alert below <span class="opt">&mdash; optional</span></span>
+            <input class="input" type="number" id="pmLowStockThreshold" min="0" step="1" inputmode="numeric" placeholder="5">
+            <span class="field-error" id="pmLowStockThresholdError">Enter a whole number, 0 or more.</span>
+          </label>
+        </div>
+        <div class="section-note" style="margin-bottom:14px">Leave starting stock blank to skip stock tracking for this product &mdash; it'll sell exactly as it does today, with no stock count shown.</div>
+
         <div class="field">
           <span class="field-label">Icon</span>
           <div class="icon-picker" id="pmIconPicker" role="group" aria-label="Choose an icon"></div>
@@ -169,6 +184,8 @@
               <input type="number" id="saleQty" value="1" min="1" step="1" inputmode="numeric">
               <button type="button" id="qtyPlus" aria-label="Increase quantity">+</button>
             </div>
+            <div class="section-note" id="saleQtyHint" style="margin-top:5px" hidden></div>
+            <span class="field-error" id="saleQtyError">Only that many in stock.</span>
           </div>
 
           <div class="field">
@@ -219,6 +236,44 @@
           <span class="tl-value" id="saleTotal">&#8358;0</span>
         </div>
         <button class="btn btn-primary btn-lg btn-block" type="submit" id="saleSubmit">Record sale</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ========== Add stock modal ========== -->
+<div class="modal-backdrop" id="stockModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="stockModalTitle">
+    <div class="modal-head">
+      <h2 class="modal-title" id="stockModalTitle">Add stock</h2>
+      <button class="icon-btn" type="button" id="stockModalClose" aria-label="Close">&times;</button>
+    </div>
+
+    <form id="stockForm" novalidate>
+      <div class="modal-body">
+        <div class="sale-product">
+          <span class="sp-icon" id="smIcon" aria-hidden="true">&#128241;</span>
+          <div>
+            <div class="sp-name" id="smName">Product</div>
+            <div class="sp-cat" id="smCat">Category</div>
+          </div>
+        </div>
+
+        <label class="field">
+          <span class="field-label" for="smQty">Quantity received</span>
+          <input class="input" type="number" id="smQty" min="1" step="1" inputmode="numeric" placeholder="e.g. 10">
+          <span class="field-error" id="smQtyError">Enter a whole number of 1 or more.</span>
+        </label>
+
+        <label class="field">
+          <span class="field-label" for="smNote">Note <span class="opt">&mdash; optional</span></span>
+          <input class="input" type="text" id="smNote" autocomplete="off" placeholder="e.g. supplier or batch">
+        </label>
+      </div>
+
+      <div class="modal-foot">
+        <button class="btn btn-quiet" type="button" id="smCancel">Cancel</button>
+        <button class="btn btn-primary" type="submit">Save</button>
       </div>
     </form>
   </div>

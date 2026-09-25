@@ -38,6 +38,10 @@
     pmCategoryError:   doc.getElementById('pmCategoryError'),
     pmPrice:           doc.getElementById('pmPrice'),
     pmPriceError:      doc.getElementById('pmPriceError'),
+    pmStartingStock:      doc.getElementById('pmStartingStock'),
+    pmStartingStockError: doc.getElementById('pmStartingStockError'),
+    pmLowStockThreshold:      doc.getElementById('pmLowStockThreshold'),
+    pmLowStockThresholdError: doc.getElementById('pmLowStockThresholdError'),
     pmIconPicker:      doc.getElementById('pmIconPicker'),
     pmCancel:          doc.getElementById('pmCancel'),
 
@@ -50,6 +54,8 @@
     saleQty:        doc.getElementById('saleQty'),
     qtyMinus:       doc.getElementById('qtyMinus'),
     qtyPlus:        doc.getElementById('qtyPlus'),
+    saleQtyHint:    doc.getElementById('saleQtyHint'),
+    saleQtyError:   doc.getElementById('saleQtyError'),
     salePrice:      doc.getElementById('salePrice'),
     salePriceError: doc.getElementById('salePriceError'),
     saleNote:       doc.getElementById('saleNote'),
@@ -62,6 +68,17 @@
     saleTotal:      doc.getElementById('saleTotal'),
     saleSubmit:     doc.getElementById('saleSubmit'),
 
+    stockModal:      doc.getElementById('stockModal'),
+    stockModalClose: doc.getElementById('stockModalClose'),
+    stockForm:       doc.getElementById('stockForm'),
+    smIcon:          doc.getElementById('smIcon'),
+    smName:          doc.getElementById('smName'),
+    smCat:           doc.getElementById('smCat'),
+    smQty:           doc.getElementById('smQty'),
+    smQtyError:      doc.getElementById('smQtyError'),
+    smNote:          doc.getElementById('smNote'),
+    smCancel:        doc.getElementById('smCancel'),
+
     toastStack:     doc.getElementById('toastStack')
   };
 
@@ -70,9 +87,11 @@
   var state = {
     products: [],
     sales: [],
+    stockLevels: new Map(), // product_id -> { tracked, onHand }, from DB.getStockLevels()
     category: 'All',
     search: '',
     activeProduct: null,
+    stockProduct: null,
     paymentMode: 'paid',
     selectedIcon: '📦',
     deviceId: null,
@@ -275,27 +294,73 @@
     el.productEmpty.hidden = list.length > 0;
 
     list.forEach(function (p) {
-      var tile = node('button', 'product-tile');
-      tile.type = 'button';
-      tile.appendChild(node('span', 'tile-icon', p.icon || '📦'));
-      tile.appendChild(node('span', 'tile-name', p.name));
-      tile.appendChild(node('span', 'tile-cat', p.category || 'Uncategorised'));
+      var container = node('div', 'product-tile');
+
+      var main = node('button', 'tile-main');
+      main.type = 'button';
+
+      var icon = node('span', 'tile-icon', p.icon || '📦');
+      icon.setAttribute('aria-hidden', 'true');
+      main.appendChild(icon);
+      main.appendChild(node('span', 'tile-name', p.name));
+      main.appendChild(node('span', 'tile-cat', p.category || 'Uncategorised'));
 
       var price = Number(p.default_price) || 0;
-      tile.appendChild(price > 0
+      main.appendChild(price > 0
         ? node('span', 'tile-price', money(price))
         : node('span', 'tile-price is-unset', 'Set price at sale'));
 
-      tile.addEventListener('click', function () { openSalePanel(p, tile); });
-      el.productGrid.appendChild(tile);
+      var badge = stockBadge(p);
+      if (badge) main.appendChild(badge);
+
+      main.addEventListener('click', function () { openSalePanel(p, main); });
+      container.appendChild(main);
+
+      // A second, sibling button - not nested inside `main` - since a
+      // <button> can't contain another <button>.
+      var stockBtn = node('button', 'tile-stock-btn', '+ Stock');
+      stockBtn.type = 'button';
+      stockBtn.setAttribute('aria-label', 'Add stock to ' + p.name);
+      stockBtn.addEventListener('click', function () { openStockModal(p, stockBtn); });
+      container.appendChild(stockBtn);
+
+      el.productGrid.appendChild(container);
     });
   }
 
+  /* Returns a badge element for a tracked product's stock level, or null
+     for an untracked one - untracked products show nothing, unchanged from
+     before this feature shipped. Display is clamped at 0; the underlying
+     sum can go negative (two offline devices both selling the last unit)
+     and that stays true in the data, it just isn't shown as a negative
+     number to staff. */
+  function stockBadge(product) {
+    var level = state.stockLevels.get(product.id);
+    if (!level) return null;
+
+    var threshold = (product.low_stock_threshold != null)
+      ? product.low_stock_threshold
+      : DB.LOW_STOCK_DEFAULT;
+    var display = Math.max(0, level.onHand);
+
+    var cls, text;
+    if (level.onHand <= 0) {
+      cls = 'badge-danger'; text = 'Out of stock';
+    } else if (level.onHand <= threshold) {
+      cls = 'badge-credit'; text = 'Low stock: ' + display;
+    } else {
+      cls = 'badge-paid'; text = display + ' in stock';
+    }
+
+    return node('span', 'badge tile-stock-badge ' + cls, text);
+  }
+
   function refresh() {
-    return Promise.all([DB.getAll('products'), DB.getAll('sales')])
+    return Promise.all([DB.getAll('products'), DB.getAll('sales'), DB.getStockLevels()])
       .then(function (results) {
         state.products = results[0];
         state.sales = results[1];
+        state.stockLevels = results[2];
         renderRail();
         renderChips();
         renderGrid();
@@ -375,6 +440,10 @@
     var category = isNewCat ? el.pmNewCategory.value.trim() : el.pmCategory.value;
     var priceRaw = el.pmPrice.value.trim();
     var price = priceRaw === '' ? 0 : Number(priceRaw);
+    var stockRaw = el.pmStartingStock.value.trim();
+    var startingStock = stockRaw === '' ? 0 : Number(stockRaw);
+    var thresholdRaw = el.pmLowStockThreshold.value.trim();
+    var threshold = thresholdRaw === '' ? null : Number(thresholdRaw);
     var ok = true;
 
     if (!name) {
@@ -389,6 +458,14 @@
       setError(el.pmPrice, el.pmPriceError, true);
       ok = false;
     }
+    if (isNaN(startingStock) || startingStock < 0 || !Number.isInteger(startingStock)) {
+      setError(el.pmStartingStock, el.pmStartingStockError, true);
+      ok = false;
+    }
+    if (threshold !== null && (isNaN(threshold) || threshold < 0 || !Number.isInteger(threshold))) {
+      setError(el.pmLowStockThreshold, el.pmLowStockThresholdError, true);
+      ok = false;
+    }
     if (!ok) return;
 
     var ts = DB.nowISO();
@@ -398,13 +475,25 @@
       category: category,
       icon: state.selectedIcon,
       default_price: price,
+      low_stock_threshold: threshold,
       deleted: false,
       created_at: ts,
       updated_at: ts,
       synced: false
     };
 
+    // A positive starting stock is what makes the product tracked from day
+    // one - left blank or zero, it stays untracked exactly like every
+    // product that predates this feature.
     DB.put('products', product).then(function () {
+      return startingStock > 0
+        ? DB.recordStockMovement({
+            product_id: product.id,
+            type: 'initial',
+            quantity_delta: startingStock
+          })
+        : null;
+    }).then(function () {
       closeProductModal();
       toast('Added ' + product.name);
       nudgeSync();
@@ -436,6 +525,9 @@
     el.saleSubmit.textContent = state.paymentMode === 'credit'
       ? 'Record as pay later'
       : 'Record sale';
+    // Any change to quantity clears a stale oversell error - it'll be
+    // re-checked for real against live stock on the next submit anyway.
+    setError(el.saleQty, el.saleQtyError, false);
   }
 
   function setPaymentMode(mode) {
@@ -462,6 +554,17 @@
     el.saleQty.value = '1';
     var price = Number(product.default_price) || 0;
     el.salePrice.value = price > 0 ? String(price) : '';
+
+    // Informational only - the real, live check happens at submit time in
+    // submitSale(), since a background sync can change stock while this
+    // panel sits open.
+    var level = state.stockLevels.get(product.id);
+    if (level) {
+      el.saleQtyHint.hidden = false;
+      el.saleQtyHint.textContent = Math.max(0, level.onHand) + ' in stock';
+    } else {
+      el.saleQtyHint.hidden = true;
+    }
 
     setPaymentMode('paid');
     el.salePanel.hidden = false;
@@ -497,46 +600,137 @@
     }
     if (!ok) return;
 
-    var total = qty * price;
-    var ts = DB.nowISO();
     var product = state.activeProduct;
-
-    var sale = {
-      id: DB.newId(),
-      product_id: product.id,
-      product_name: product.name,
-      category: product.category || '',
-      quantity: qty,
-      unit_price: price,
-      total: total,
-      description: el.saleNote.value.trim(),
-      payment_status: isCredit ? 'credit' : 'paid',
-      customer_name: isCredit ? customer : '',
-      customer_phone: isCredit ? el.custPhone.value.trim() : '',
-      amount_paid: isCredit ? 0 : total,
-      balance: isCredit ? total : 0,
-      sold_at: ts,
-      created_at: ts,
-      updated_at: ts,
-      synced: false,
-      device_id: state.deviceId
-    };
-
     el.saleSubmit.disabled = true;
 
-    DB.put('sales', sale).then(function () {
-      closeSalePanel();
-      toast(isCredit
-        ? money(total) + ' owed by ' + customer
-        : money(total) + ' recorded',
-        isCredit ? 'credit' : 'paid');
-      nudgeSync();
-      return refresh();
+    // Re-derive stock from scratch right now, rather than trusting
+    // state.stockLevels as it stood when the panel opened - a background
+    // sync can change it while the panel sits open, and this is the one
+    // check that actually blocks the sale, so it has to be current.
+    DB.getStockLevels().then(function (levels) {
+      var level = levels.get(product.id);
+      var tracked = !!level;
+      var available = tracked ? Math.max(0, level.onHand) : null;
+
+      if (tracked && qty > available) {
+        setError(el.saleQty, el.saleQtyError, true);
+        el.saleQtyError.textContent = 'Only ' + available +
+          ' in stock — reduce the quantity or restock first.';
+        return; // blocked - nothing written
+      }
+
+      var total = qty * price;
+      var ts = DB.nowISO();
+
+      var sale = {
+        id: DB.newId(),
+        product_id: product.id,
+        product_name: product.name,
+        category: product.category || '',
+        quantity: qty,
+        unit_price: price,
+        total: total,
+        description: el.saleNote.value.trim(),
+        payment_status: isCredit ? 'credit' : 'paid',
+        customer_name: isCredit ? customer : '',
+        customer_phone: isCredit ? el.custPhone.value.trim() : '',
+        amount_paid: isCredit ? 0 : total,
+        balance: isCredit ? total : 0,
+        sold_at: ts,
+        created_at: ts,
+        updated_at: ts,
+        synced: false,
+        device_id: state.deviceId
+      };
+
+      return DB.put('sales', sale).then(function () {
+        // Untracked products sell exactly as they always have - no
+        // movement row, no stock check, unchanged from before this
+        // feature shipped.
+        return tracked
+          ? DB.recordStockMovement({
+              product_id: product.id,
+              type: 'sale',
+              quantity_delta: -qty,
+              related_sale_id: sale.id
+            })
+          : null;
+      }).then(function () {
+        closeSalePanel();
+        toast(isCredit
+          ? money(total) + ' owed by ' + customer
+          : money(total) + ' recorded',
+          isCredit ? 'credit' : 'paid');
+        nudgeSync();
+        return refresh();
+      });
     }).catch(function (err) {
       console.error('[app] could not save sale', err);
       toast('Could not save that sale', 'error');
     }).then(function () {
       el.saleSubmit.disabled = false;
+    });
+  }
+
+  /* ------------------------------------------------------------ restock */
+
+  function openStockModal(product, sourceEl) {
+    state.stockProduct = product;
+    state.lastFocus = sourceEl || doc.activeElement;
+
+    el.stockForm.reset();
+    clearErrors(el.stockModal);
+
+    el.smIcon.textContent = product.icon || '📦';
+    el.smName.textContent = product.name;
+    el.smCat.textContent = product.category || 'Uncategorised';
+
+    el.stockModal.hidden = false;
+    el.smQty.focus();
+  }
+
+  function closeStockModal() {
+    el.stockModal.hidden = true;
+    state.stockProduct = null;
+    if (state.lastFocus && state.lastFocus.focus) state.lastFocus.focus();
+  }
+
+  function submitStock(event) {
+    event.preventDefault();
+    if (!state.stockProduct) return;
+    clearErrors(el.stockModal);
+
+    var product = state.stockProduct;
+    var qtyRaw = el.smQty.value.trim();
+    var qty = Number(qtyRaw);
+
+    if (qtyRaw === '' || isNaN(qty) || qty < 1 || !Number.isInteger(qty)) {
+      setError(el.smQty, el.smQtyError, true);
+      return;
+    }
+
+    var note = el.smNote.value.trim();
+
+    // 'initial' vs 'restock' is decided by whether the product already has
+    // any movement history - its very first stock entry is what makes it
+    // tracked at all, so that one is 'initial' and every one after is a
+    // plain 'restock'. Not a separate code path, just a different label.
+    DB.getStockLevels().then(function (levels) {
+      var alreadyTracked = levels.has(product.id);
+      return DB.recordStockMovement({
+        product_id: product.id,
+        type: alreadyTracked ? 'restock' : 'initial',
+        quantity_delta: qty,
+        note: note
+      });
+    }).then(function () {
+      closeStockModal();
+      toast('Added ' + qty + ' to ' + product.name);
+      nudgeSync();
+      return refresh();
+    }).catch(function (err) {
+      console.error('[app] could not save stock movement', err);
+      toast('Could not save that stock update', 'error');
     });
   }
 
@@ -583,9 +777,20 @@
       setError(el.custName, el.custNameError, false);
     });
 
+    el.stockModalClose.addEventListener('click', closeStockModal);
+    el.smCancel.addEventListener('click', closeStockModal);
+    el.stockForm.addEventListener('submit', submitStock);
+    el.stockModal.addEventListener('mousedown', function (e) {
+      if (e.target === el.stockModal) closeStockModal();
+    });
+    el.smQty.addEventListener('input', function () {
+      setError(el.smQty, el.smQtyError, false);
+    });
+
     doc.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
-      if (!el.salePanel.hidden) closeSalePanel();
+      if (!el.stockModal.hidden) closeStockModal();
+      else if (!el.salePanel.hidden) closeSalePanel();
       else if (!el.productModal.hidden) closeProductModal();
     });
   }
@@ -604,8 +809,12 @@
         if (global.Sync) {
           global.Sync.onStateChange(renderSyncPill);
           global.Sync.init();
-          // Records pulled from the cloud should appear without a manual reload.
-          global.Sync.onPullComplete(refresh);
+          // Records pulled from the cloud should appear without a manual
+          // reload - stock levels in particular, since another device's
+          // sale or restock changes what's actually safe to sell here.
+          // onDataChanged (not onPullComplete) so this only re-renders when
+          // a pull actually wrote something, not on every ~25s tick.
+          global.Sync.onDataChanged(refresh);
         }
       })
       .catch(function (err) {

@@ -675,6 +675,7 @@ img, svg { display: block; max-width: 100%; }
 }
 .badge-paid    { background: var(--paid-wash);   color: var(--paid-ink); border-color: var(--paid-line); }
 .badge-credit  { background: var(--credit-wash); color: var(--credit-ink);   border-color: var(--credit-line); }
+.badge-danger  { background: var(--danger-wash); color: var(--danger);   border-color: var(--danger-line); }
 .badge-neutral { background: var(--surface-sunk);color: var(--ink-soft); border-color: var(--line); }
 
 /* ==========================================================================
@@ -993,25 +994,38 @@ img, svg { display: block; max-width: 100%; }
   gap: 11px;
 }
 
-/* Product tiles are their own thing: squat, icon-led, tightly ruled. */
+/* Product tiles are their own thing: squat, icon-led, tightly ruled.
+   The tile is a non-interactive container holding two SIBLING buttons -
+   .tile-main (record a sale) and .tile-stock-btn (add stock) - rather than
+   nesting one button inside another. A <button> can't contain another
+   <button> per the HTML content model, and browsers handle the inner
+   click inconsistently regardless of stopPropagation tricks. */
 .product-tile {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--e1);
+  overflow: hidden;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.product-tile:focus-within {
+  border-color: var(--gold);
+  box-shadow: var(--e2);
+}
+
+.tile-main {
   display: flex;
   flex-direction: column;
   gap: 2px;
   text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  width: 100%;
   padding: 13px 13px 12px;
-  box-shadow: var(--e1);
-  transition: border-color var(--t-fast), transform var(--t-fast), box-shadow var(--t-fast);
+  transition: background var(--t-fast);
 }
-.product-tile:hover {
-  border-color: var(--gold);
-  box-shadow: var(--e2);
-  transform: translateY(-2px);
-}
-.product-tile:active { transform: translateY(-1px) scale(.99); }
+.tile-main:hover { background: var(--surface-sunk); }
+.tile-main:active { background: var(--gold-wash); }
 
 .tile-icon { font-size: 25px; line-height: 1.1; margin-bottom: 6px; }
 .tile-name {
@@ -1036,6 +1050,21 @@ img, svg { display: block; max-width: 100%; }
   color: var(--gold-dark);
   letter-spacing: 0;
 }
+.tile-stock-badge { margin-top: 7px; align-self: flex-start; }
+
+.tile-stock-btn {
+  width: 100%;
+  padding: 7px 13px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: var(--surface-sunk);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  color: var(--ink-soft);
+  text-align: center;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.tile-stock-btn:hover { background: var(--gold-wash); color: var(--gold-dark); }
 
 /* --- icon picker ------------------------------------------------------- */
 
@@ -1242,6 +1271,5 @@ img, svg { display: block; max-width: 100%; }
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
-  .product-tile:hover { transform: none; }
   .btn-primary:hover:not(:disabled) { transform: none; }
 }
