@@ -23,9 +23,19 @@
 
    Leaving every field as "" keeps the app in pure offline mode: the sync
    pill will read "Offline only" and nothing else changes.
+
+   TESTING AGAINST A SEPARATE PROJECT
+   A test harness may define window.FIREBASE_CONFIG_OVERRIDE before this
+   file runs (Playwright's addInitScript does this), and the app will use
+   that project instead. This exists so automated tests never point at the
+   shop's live database - see "Testing safely" in README.md.
+
+   Nothing a normal browser does can set this: it has to be injected into
+   the page before any script executes. In ordinary use this file behaves
+   exactly as it always has.
    ========================================================================== */
 
-window.FIREBASE_CONFIG = {
+window.FIREBASE_CONFIG = window.FIREBASE_CONFIG_OVERRIDE || {
   apiKey: "AIzaSyBSydCYchOOOy0bE56j1-nMLbosg2AqFKc",
   authDomain: "sunshine-8f335.firebaseapp.com",
   projectId: "sunshine-8f335",

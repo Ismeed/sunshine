@@ -156,6 +156,59 @@ distribution and committed as static files) rather than loaded from a
 CDN at runtime, so the app shell never has a hard network dependency
 just to load itself.
 
+## Testing safely
+
+**Automated tests must never point at the shop's Firebase project.** This is
+a hard prerequisite, enforced in code, not a convention to remember.
+
+It is enforced because testing against production went wrong three separate
+ways, none of them hypothetical:
+
+- A run crashed mid-suite and left 36 QA records live in the shop's
+  database — fake products, fake sales, fake debts.
+- A test that borrows a real product to check price protection wrote a fake
+  ₦123,456 onto it and crashed before restoring it.
+- Deleted QA records kept showing on a real browser long after the database
+  was verified clean, because a hard delete in Firestore never reaches a
+  device that already pulled the row (see the warning below).
+
+### Setting up the test project
+
+1. [Firebase console](https://console.firebase.google.com) → **Add project**
+   (e.g. `sunshine-qa`). Skip Google Analytics.
+2. **Build → Firestore Database → Create database**, production mode, any
+   region.
+3. **Build → Authentication → Get started** → enable **Anonymous**.
+4. **Firestore → Rules** → paste [firebase/firestore.rules](firebase/firestore.rules)
+   → **Publish**.
+5. **Project settings → General → Your apps → Web (`</>`)** → register → copy
+   the `firebaseConfig`.
+6. Save it as `.tmp_qa/firebase-test-config.json` (there is an
+   `.example.json` alongside it). That path is gitignored via `.tmp_*/`, so
+   the credentials never enter the repo.
+
+Set `QA_FIREBASE_CONFIG=/path/to/config.json` to keep it elsewhere.
+
+### How the guard works
+
+Three independent layers, so no single mistake can reach the shop's data:
+
+1. **The harness will not load.** Requiring `.tmp_qa/lib.js` reads the test
+   config and throws if it is absent, malformed, or names the live project —
+   the run dies before a browser opens.
+2. **Every browser context is redirected.** The test config is injected as
+   `window.FIREBASE_CONFIG_OVERRIDE` before any page script runs, and
+   [js/firebase-config.js](js/firebase-config.js) honours it. A normal
+   browser cannot set this; it has to be injected pre-navigation, so ordinary
+   use is unaffected.
+3. **Every page re-checks itself.** After loading, each page asserts its live
+   `projectId` is not production and aborts the run if it is — the injection
+   is verified, never assumed.
+
+The layout fixture (`.tmp_qa/fixture.js`) needs no backend at all: it seeds
+IndexedDB directly and aborts every `googleapis.com` request at the network
+layer, so it physically cannot reach any cloud project.
+
 ## Handing a fresh system to a shop
 
 After trialling the app you'll want to clear out test data so the shop
