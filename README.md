@@ -6,9 +6,22 @@ offline and syncs automatically to a shared Firebase Firestore database
 when the connection is available — but Firebase is entirely optional;
 the app is 100% functional without it.
 
-The interface uses one shared design system (`css/styles.css`) with full
-automatic dark mode — it follows the OS/browser `prefers-color-scheme`
-setting on both screens, no toggle needed.
+The interface uses one shared design system (`css/styles.css`): a bright,
+sunlit palette — warm cream ground, white cards, and a vivid amber-to-coral
+accent.
+
+**It is deliberately light-only.** There is no dark theme and no
+`prefers-color-scheme` switch. An earlier version followed the OS setting,
+which meant staff whose phones were in dark mode got a dark app with no way
+to change it from inside the interface — not what the shop wanted. The
+stylesheet now also declares `color-scheme: light`, so form controls and
+scrollbars stay light on a dark-mode device instead of rendering as a
+half-inverted mix.
+
+Every colour that carries text meets WCAG AA against its own background
+(the weakest is 4.65:1); the primary button uses near-black ink on amber at
+8.2:1 rather than the white-on-amber that would have failed at 2.5:1. Bright
+had to survive being read at a counter in daylight.
 
 **Handing this to the shop?** [docs/handover.md](docs/handover.md) is the
 plain-language guide for staff and the owner — no technical knowledge

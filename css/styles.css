@@ -1,45 +1,59 @@
 /* ==========================================================================
    Sunshine Gadgets POS - shared design system
-   Cool neutral ground, white surfaces, one deliberate gold accent, rendered
-   with modern depth (layered shadows, glass surfaces, gradient accents) and
-   full automatic dark-mode support. Status colours carry meaning of their
-   own and are never the brand colour.
+   A bright, sunlit palette: warm cream ground, white surfaces, and a vivid
+   sunrise accent (amber -> coral) that earns the shop's name. Status colours
+   carry meaning of their own and are never the brand colour.
+
+   DELIBERATELY LIGHT-ONLY. There is no dark theme and no prefers-color-scheme
+   switch: the shop asked for a bright interface, and half their devices sit
+   in the OS dark setting, which previously flipped the whole app dark on them
+   with nothing in the UI to turn it back. `color-scheme: light` below pins
+   form controls and scrollbars light too, so a dark-mode phone still renders
+   the bright design rather than a half-inverted mix.
+
+   Every colour that carries text meets WCAG AA against its own background -
+   bright is not the same as washed out, and this thing gets read at a counter
+   in daylight.
    ========================================================================== */
 
 :root {
   color-scheme: light;
 
   /* --- surfaces & ink ------------------------------------------------- */
-  --bg:          #F4F5F9;
-  --bg-wash:     #EDE9F7;      /* faint tint pooled behind hero numbers */
+  --bg:          #FFF9F2;
+  --bg-wash:     #FFF0DB;      /* faint tint pooled behind hero numbers */
   --surface:     #FFFFFF;
-  --surface-sunk:#EEF0F5;
+  --surface-sunk:#FFF6EA;
   --surface-raised: #FFFFFF;
-  --ink:         #191C24;
-  --ink-soft:    #5B6270;
-  --ink-faint:   #8B92A0;
-  --line:        #E4E6EE;
-  --line-strong: #CDD1DE;
+  --ink:         #1F1505;      /* warm near-black, ~16:1 on white */
+  --ink-soft:    #6A5843;      /* ~6.4:1 */
+  --ink-faint:   #877154;      /* ~4.5:1 - still AA, unlike a pale grey */
+  --line:        #F5E4CC;
+  --line-strong: #E8CFA9;
 
   /* --- the one accent, spent only on brand + primary action ----------- */
-  --gold:        #E9A227;
-  --gold-2:      #F3B94A;      /* lighter stop for gradients */
-  --gold-dark:   #B87F17;
-  --gold-wash:   #FDF3E0;
-  --gold-glow:   rgba(233, 162, 39, .35);
+  --gold:        #FF9F1C;      /* vivid, for fills and glows only */
+  --gold-2:      #FFC53D;      /* lighter stop for gradients */
+  --gold-dark:   #B45309;      /* the text-safe one, ~4.8:1 on white */
+  --gold-wash:   #FFF3DC;
+  --gold-glow:   rgba(255, 159, 28, .45);
+
+  /* Sunrise gradient - the signature. Amber into coral, used on the brand
+     mark, the primary button and the hero accents. */
+  --grad-brand:  linear-gradient(135deg, #FFC53D 0%, #FF9F1C 45%, #FF6B35 100%);
 
   /* --- status colours ------------------------------------------------- */
-  --paid:        #2F9E6E;
-  --paid-ink:    #1E7A55;
-  --paid-wash:   #E7F5EF;
-  --paid-line:   #BFE3D3;
-  --credit:      #C6572E;
-  --credit-ink:  #A8461F;
-  --credit-wash: #FBEDE7;
-  --credit-line: #EBC9BA;
-  --danger:      #C0392B;
-  --danger-wash: #FDF6F5;
-  --danger-line: #E4B7B1;
+  --paid:        #00B87C;
+  --paid-ink:    #047857;
+  --paid-wash:   #E3FBF1;
+  --paid-line:   #A7EBD0;
+  --credit:      #FF6B35;
+  --credit-ink:  #C2410C;
+  --credit-wash: #FFF0E8;
+  --credit-line: #FFCDB4;
+  --danger:      #E11D48;
+  --danger-wash: #FFF1F4;
+  --danger-line: #FBC5D2;
 
   /* --- type ----------------------------------------------------------- */
   --font: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -59,65 +73,22 @@
   --topbar-h: 56px;
   --rail-w: 272px;
 
-  /* --- elevation - layered, soft, slightly warm to match the accent --- */
-  --e1: 0 1px 2px rgba(23,17,7,.05), 0 1px 1px rgba(23,17,7,.04);
-  --e2: 0 2px 6px rgba(23,17,7,.06), 0 8px 24px rgba(23,17,7,.08);
-  --e3: 0 8px 20px rgba(23,17,7,.10), 0 24px 48px rgba(23,17,7,.12);
+  /* --- elevation - layered and warm-tinted, so cards look sunlit rather
+         than smudged with grey against the cream ground ----------------- */
+  --e1: 0 1px 2px rgba(180,110,20,.07), 0 1px 1px rgba(180,110,20,.05);
+  --e2: 0 2px 8px rgba(180,110,20,.09), 0 10px 28px rgba(180,110,20,.10);
+  --e3: 0 10px 24px rgba(180,110,20,.13), 0 28px 56px rgba(180,110,20,.14);
   --shadow-pop:   var(--e3);
-  --shadow-panel: -16px 0 48px rgba(23,17,7,.14);
+  --shadow-panel: -16px 0 48px rgba(180,110,20,.18);
   --focus: 0 0 0 2px var(--surface), 0 0 0 4.5px var(--gold-dark);
 
-  --glass-bg: rgba(255, 255, 255, .72);
-  --glass-border: rgba(255, 255, 255, .5);
+  --glass-bg: rgba(255, 252, 247, .78);
+  --glass-border: rgba(255, 255, 255, .7);
 
   --ease: cubic-bezier(.16, 1, .3, 1);
   --t-fast: 140ms var(--ease);
   --t-med: 220ms var(--ease);
   --t-panel: 320ms var(--ease);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-
-    --bg:          #101318;
-    --bg-wash:     #1B1530;
-    --surface:     #1A1E26;
-    --surface-sunk:#20242D;
-    --surface-raised: #232833;
-    --ink:         #F1F2F6;
-    --ink-soft:    #A7ADBB;
-    --ink-faint:   #6B7280;
-    --line:        #2A2F3A;
-    --line-strong: #3A4050;
-
-    --gold:        #EFAE3E;
-    --gold-2:      #F7C766;
-    --gold-dark:   #C98A1E;
-    --gold-wash:   #2E260F;
-    --gold-glow:   rgba(239, 174, 62, .35);
-
-    --paid:        #3EBA85;
-    --paid-ink:    #6FD9A8;
-    --paid-wash:   #123324;
-    --paid-line:   #1F5A3E;
-    --credit:      #E07750;
-    --credit-ink:  #F0916A;
-    --credit-wash: #38200F;
-    --credit-line: #6B3A20;
-    --danger:      #E0685A;
-    --danger-wash: #3A1613;
-    --danger-line: #6B2A24;
-
-    --e1: 0 1px 2px rgba(0,0,0,.35), 0 1px 1px rgba(0,0,0,.3);
-    --e2: 0 2px 8px rgba(0,0,0,.35), 0 12px 28px rgba(0,0,0,.4);
-    --e3: 0 12px 28px rgba(0,0,0,.45), 0 28px 56px rgba(0,0,0,.5);
-    --shadow-panel: -16px 0 48px rgba(0,0,0,.5);
-    --focus: 0 0 0 2px var(--surface), 0 0 0 4.5px var(--gold);
-
-    --glass-bg: rgba(20, 23, 30, .68);
-    --glass-border: rgba(255, 255, 255, .08);
-  }
 }
 
 /* ==========================================================================
@@ -128,10 +99,15 @@
 
 html { -webkit-text-size-adjust: 100%; }
 
+/* Two soft light-pools, fixed so they read as daylight falling on the page
+   rather than something that scrolls with the content. Kept very low in
+   saturation: the colour belongs to the products and the money figures, and
+   a background that competes with them is just noise on a till screen. */
 body {
   margin: 0;
   background:
-    radial-gradient(1100px 480px at 12% -8%, var(--bg-wash) 0%, transparent 60%),
+    radial-gradient(1100px 480px at 10% -8%, #FFE9C7 0%, transparent 62%),
+    radial-gradient(900px 440px at 100% -4%, #FFDCE6 0%, transparent 58%),
     var(--bg);
   background-attachment: fixed;
   color: var(--ink);
@@ -221,13 +197,19 @@ img, svg { display: block; max-width: 100%; }
   white-space: nowrap;
 }
 
+/* The little sun. Highlight offset up-left so it reads as a lit sphere,
+   and a soft corona rather than a flat ring. */
 .brand-mark {
   width: 24px;
   height: 24px;
   border-radius: 50%;
   flex: none;
-  background: radial-gradient(circle at 34% 30%, var(--gold-2) 0%, var(--gold) 55%, var(--gold-dark) 100%);
-  box-shadow: 0 0 0 4px var(--gold-wash), 0 2px 6px var(--gold-glow);
+  background:
+    radial-gradient(circle at 34% 28%, #FFE9A8 0%, var(--gold-2) 34%, var(--gold) 68%, #FF6B35 100%);
+  box-shadow:
+    0 0 0 4px var(--gold-wash),
+    0 2px 10px var(--gold-glow),
+    0 0 22px rgba(255, 159, 28, .5);
 }
 
 .brand-sub {
@@ -370,15 +352,20 @@ img, svg { display: block; max-width: 100%; }
 }
 .btn:active:not(:disabled) { transform: translateY(1px) scale(.99); }
 
+/* Near-black ink on the bright gradient, not white. White on amber is about
+   2.5:1 and fails badly; this lands near 10:1 and stays legible in daylight
+   at a counter, while keeping the button the brightest thing on screen. */
 .btn-primary {
-  background: linear-gradient(155deg, var(--gold-2), var(--gold) 55%, var(--gold-dark));
-  border-color: var(--gold-dark);
-  color: #241A05;
-  box-shadow: 0 1px 2px rgba(23,17,7,.12), 0 6px 16px var(--gold-glow);
+  background: var(--grad-brand);
+  border-color: #E07B12;
+  color: #2B1A02;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(180,110,20,.18), 0 6px 18px var(--gold-glow);
 }
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 2px 4px rgba(23,17,7,.14), 0 10px 24px var(--gold-glow);
+  box-shadow: 0 2px 6px rgba(180,110,20,.22), 0 12px 28px var(--gold-glow);
   transform: translateY(-1px);
+  filter: saturate(112%) brightness(103%);
 }
 
 .btn-quiet {
@@ -689,6 +676,16 @@ img, svg { display: block; max-width: 100%; }
   overflow: hidden;
   overflow-x: auto;
   box-shadow: var(--e1);
+  /* Makes this the containing block for absolutely positioned descendants.
+     Without it the .sr-only span in the ledger's "Actions" header - which is
+     position:absolute - resolved against the page instead of this box, so
+     overflow-x never clipped it. It sat at the far edge of a 579px-wide
+     table and stretched the document to 499px on a 390px screen: the whole
+     Analytics page could be dragged sideways, and the visible culprit (a
+     wide table) was innocent, since the table itself scrolls in here just
+     fine. A scroll container has to own its absolute children or it isn't
+     really containing anything. */
+  position: relative;
 }
 
 .table { font-size: var(--fs-md); }
@@ -722,9 +719,12 @@ img, svg { display: block; max-width: 100%; }
    KPI cards - flat, ruled, figure-led. Deliberately not the tile style.
    ========================================================================== */
 
+/* 240px, not 196px. At 196 the grid fitted five cards across a laptop and
+   each one was too narrow for seven-figure money: "₦2,464,330.55" overflowed
+   its card and spilled over the neighbour. Fewer, wider cards. */
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1px;
   background: var(--line);
   border: 1px solid var(--line);
@@ -740,12 +740,19 @@ img, svg { display: block; max-width: 100%; }
   position: relative;
 }
 .kpi-label { font-size: var(--fs-sm); font-weight: 650; color: var(--ink-soft); }
+/* The display size was chosen against ₦45,000. A shop that trades for a year
+   puts eight figures in the "All time" card, and at a fixed 36px that number
+   was simply cut off - the owner could not read their own revenue, which is
+   the single thing this screen exists to show. The figure now scales down as
+   it needs to, and overflow-wrap is the last resort: wrapping an enormous
+   number is ugly, but it is still readable, and clipping it is not. */
 .kpi-value {
-  font-size: var(--fs-display);
+  font-size: clamp(1.375rem, 1.1vw + 0.9rem, var(--fs-display));
   font-weight: 680;
   letter-spacing: -0.025em;
   line-height: 1.15;
   margin-top: 7px;
+  overflow-wrap: anywhere;
 }
 .kpi-note { font-size: var(--fs-xs); color: var(--ink-faint); margin-top: 5px; }
 .kpi-credit { border-top-color: var(--credit); }
@@ -904,12 +911,15 @@ img, svg { display: block; max-width: 100%; }
 .rail-eyebrow { font-size: var(--fs-sm); font-weight: 650; color: var(--ink-soft); }
 .rail-date { font-size: var(--fs-xs); color: var(--ink-faint); margin-top: 1px; }
 
+/* Same fixed-size trap as .kpi-value: this sits in a 272px rail, and a good
+   trading day is seven figures. Scaled for the same reason. */
 .rail-figure {
-  font-size: var(--fs-display);
+  font-size: clamp(1.375rem, 1.1vw + 0.9rem, var(--fs-display));
   font-weight: 680;
   letter-spacing: -0.025em;
   line-height: 1.15;
   margin-top: 11px;
+  overflow-wrap: anywhere;
   background: linear-gradient(155deg, var(--ink) 40%, var(--gold-dark));
   -webkit-background-clip: text;
   background-clip: text;
@@ -988,12 +998,17 @@ img, svg { display: block; max-width: 100%; }
   transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast), box-shadow var(--t-fast);
 }
 .chip:hover { border-color: var(--ink-faint); color: var(--ink); }
+/* The selected filter used to be a near-black pill, which was the one dark
+   slab left on an otherwise sunlit screen. Same sunrise gradient as the
+   primary button, same near-black ink on it (8.2:1). */
 .chip[aria-pressed="true"] {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--bg);
-  box-shadow: var(--e1);
+  background: var(--grad-brand);
+  border-color: #E07B12;
+  color: #2B1A02;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(180,110,20,.18), 0 4px 12px var(--gold-glow);
 }
+.chip[aria-pressed="true"]:hover { color: #2B1A02; }
 
 /* --- product grid ------------------------------------------------------ */
 
@@ -1017,11 +1032,24 @@ img, svg { display: block; max-width: 100%; }
   border-radius: var(--r-md);
   box-shadow: var(--e1);
   overflow: hidden;
-  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast),
+              transform var(--t-fast);
+}
+.product-tile:hover {
+  border-color: var(--gold-2);
+  box-shadow: var(--e2);
+  transform: translateY(-2px);
 }
 .product-tile:focus-within {
   border-color: var(--gold);
   box-shadow: var(--e2);
+}
+
+/* Lift is decoration; anyone who has asked the OS to calm motion down gets
+   the colour change on its own. */
+@media (prefers-reduced-motion: reduce) {
+  .product-tile { transition: border-color var(--t-fast), box-shadow var(--t-fast); }
+  .product-tile:hover { transform: none; }
 }
 
 .tile-main {
@@ -1167,6 +1195,17 @@ img, svg { display: block; max-width: 100%; }
   gap: 24px;
 }
 
+/* A flex child defaults to min-width:auto, meaning it refuses to shrink below
+   its own content. The pay-later ledger is six columns wide, so on a phone
+   that section grew to ~567px and dragged the entire page sideways with it -
+   the .table-wrap around it has overflow-x:auto and never got the chance to
+   scroll, because nothing ever forced it narrower than its contents.
+   The inventory table never showed this: it lives inside .grid-2, whose
+   minmax(0,1fr) tracks already pin the minimum to zero.
+   With min-width:0 the section takes the screen width, and the wide table
+   scrolls inside its own card the way it was always meant to. */
+.analytics-layout > * { min-width: 0; }
+
 /* --- password gate ----------------------------------------------------- */
 
 .gate {
@@ -1224,7 +1263,14 @@ img, svg { display: block; max-width: 100%; }
 }
 .range-group button:last-child { border-right: 0; }
 .range-group button:hover { background: var(--surface-sunk); color: var(--ink); }
-.range-group button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+/* Matches the category chips on the Sales screen - same sunrise gradient,
+   same near-black ink (8.2:1). These were the last two near-black slabs
+   sitting on an otherwise sunlit interface. */
+.range-group button[aria-pressed="true"] {
+  background: var(--grad-brand);
+  color: #2B1A02;
+  font-weight: 700;
+}
 
 /* --- top products ------------------------------------------------------ */
 
@@ -1240,7 +1286,19 @@ img, svg { display: block; max-width: 100%; }
 }
 .rank-row:last-child { border-bottom: 0; }
 .rank-n { font-size: var(--fs-sm); color: var(--ink-faint); font-variant-numeric: tabular-nums; }
-.rank-name { font-weight: 620; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* display:block is load-bearing, not cosmetic. This is a <span>, and
+   overflow/text-overflow do nothing on a non-replaced inline element - so the
+   ellipsis declared here never fired and a long product name ran straight out
+   of the card, dragging the Analytics page sideways at 320px. It only showed
+   up with real product names; the short fixtures never reached the edge. */
+.rank-name {
+  display: block;
+  max-width: 100%;
+  font-weight: 620;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .rank-meta { font-size: var(--fs-xs); color: var(--ink-faint); }
 .rank-val { font-weight: 680; font-variant-numeric: tabular-nums; text-align: right; }
 .rank-track {
@@ -1275,6 +1333,23 @@ img, svg { display: block; max-width: 100%; }
   .brand-sub { display: none; }
   .sync-pill .sync-text { display: none; }
   .sync-pill { padding: 6px 10px; }
+
+  /* The Analytics topbar carries one item more than Sales (Log out), and at
+     390px that pushed the sync pill 49px off-screen - the whole page scrolled
+     sideways. A flex item will not shrink below its own content unless it is
+     told it may, so the shop name keeps its intrinsic width and shoves
+     everything past the edge. Let the NAME give up space (it truncates, and
+     the logo still identifies the app) before anything functional does:
+     navigation, Log out and the sync state all stay whole. */
+  .brand { min-width: 0; }
+  .brand > span:not(.brand-mark) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .topnav { flex: none; }
+  .topnav a { padding: 7px 10px; }
   .sales-layout, .analytics-layout { padding-left: 12px; padding-right: 12px; }
   .product-grid { grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); }
   .field-row { flex-direction: column; gap: 0; }
