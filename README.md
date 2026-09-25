@@ -174,7 +174,7 @@ straight back up and re-pollutes the database you just cleaned.
 - Or from the browser console on either page:
   ```js
   (async () => {
-    for (const store of ['products', 'sales', 'payments', 'settings']) {
+    for (const store of ['products', 'sales', 'payments', 'stock_movements', 'settings']) {
       for (const row of await DB.getAll(store)) {
         await DB.delete(store, store === 'settings' ? row.key : row.id);
       }
@@ -183,9 +183,22 @@ straight back up and re-pollutes the database you just cleaned.
   })();
   ```
 
-This wipes that device's products, sales, payments, its device id, its
-sync bookmarks, and its analytics password hash — a true factory reset
-for that device. Leave the app closed afterwards until step 2 is done.
+This wipes that device's products, sales, payments, stock ledger, its
+device id, its sync bookmarks, and its analytics password hash — a true
+factory reset for that device. Leave the app closed afterwards until
+step 2 is done.
+
+**A device does not find out about a cloud deletion.** Deleting rows
+straight out of Firestore — the step-2 script below, or the console —
+removes them from the database but tells nobody: every device that had
+already pulled those rows keeps showing them indefinitely, because a hard
+delete leaves nothing behind to sync. (This is exactly why deleting a
+product *through the app* is a soft delete instead.) Worse, a leftover
+local copy can carry a newer `updated_at` than whatever now sits in the
+cloud, so editing it later pushes the stale version back up and wins.
+
+So if you have wiped the cloud, clear every device too, even ones you
+think only ever read. Emptying the cloud is not enough on its own.
 
 **2. Wipe the shared cloud database.** From the console on
 `index.html`, once the sync pill reads *Synced*:
