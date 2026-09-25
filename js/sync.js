@@ -130,16 +130,37 @@
       return authReadyPromise;
     }
 
-    authReadyPromise = new Promise(function (resolve) {
+    authReadyPromise = new Promise(function (resolve, reject) {
       var unsubscribe = auth.onAuthStateChanged(function (user) {
         if (!user) return;
         unsubscribe();
         resolve();
       });
       auth.signInAnonymously().catch(function (err) {
-        console.error('[sync] anonymous sign-in failed', err);
         unsubscribe();
-        resolve(); // let the Firestore calls fail loudly downstream instead of hanging forever
+
+        // Drop the cached promise. Without this, one failed sign-in is
+        // remembered for the life of the page: a device opened on a flaky
+        // connection would never attempt to authenticate again, so it
+        // would never sync again either - while the pill kept promising
+        // it would retry. Clearing it lets the next pass try afresh.
+        authReadyPromise = null;
+
+        var code = (err && err.code) || '';
+        if (/network|timeout|internal-error/i.test(code)) {
+          // Transient and self-healing: warn, don't shout. On mobile data
+          // this is routine.
+          console.warn('[sync] anonymous sign-in failed (' + code + '); will retry');
+        } else {
+          // Anything else - provider disabled, bad API key, project
+          // misconfigured - will never fix itself and needs a human.
+          console.error('[sync] anonymous sign-in failed', err);
+        }
+
+        // Reject rather than resolve: proceeding unauthenticated would
+        // just produce permission-denied noise on every collection. The
+        // pass aborts, the pill drops to offline, the next tick retries.
+        reject(err);
       });
     });
     return authReadyPromise;
