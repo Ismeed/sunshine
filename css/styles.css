@@ -751,6 +751,15 @@ img, svg { display: block; max-width: 100%; }
 .kpi-credit { border-top-color: var(--credit); }
 .kpi-credit .kpi-value { color: var(--credit-ink); }
 .kpi-paid { border-top-color: var(--paid); }
+.kpi-danger { border-top-color: var(--danger); }
+.kpi-danger .kpi-value { color: var(--danger); }
+
+/* Period-over-period delta, range-scoped KPIs only - outstanding credit and
+   the inventory figures are live snapshots with no "previous period" to
+   compare against, so they never get one of these. */
+.kpi-delta { font-size: var(--fs-xs); font-weight: 650; margin-top: 5px; }
+.kpi-delta.is-up   { color: var(--paid-ink); }
+.kpi-delta.is-down { color: var(--credit-ink); }
 
 /* ==========================================================================
    Bar chart primitive - plain divs, no library

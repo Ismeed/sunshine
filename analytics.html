@@ -86,21 +86,47 @@
       <div class="kpi-label">Sales value</div>
       <div class="kpi-value" id="kpiRevenue">&#8358;0</div>
       <div class="kpi-note" id="kpiRevenueNote">Selected range</div>
+      <div class="kpi-delta" id="kpiRevenueDelta" hidden></div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Transactions</div>
       <div class="kpi-value" id="kpiCount">0</div>
       <div class="kpi-note" id="kpiCountNote">Selected range</div>
+      <div class="kpi-delta" id="kpiCountDelta" hidden></div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Units sold</div>
       <div class="kpi-value" id="kpiUnits">0</div>
       <div class="kpi-note" id="kpiUnitsNote">Selected range</div>
+      <div class="kpi-delta" id="kpiUnitsDelta" hidden></div>
     </div>
     <div class="kpi kpi-credit">
       <div class="kpi-label">Outstanding credit</div>
       <div class="kpi-value" id="kpiOutstanding">&#8358;0</div>
       <div class="kpi-note">All time &mdash; not filtered by range</div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <h2 class="section-title" id="inventoryHeading">Inventory</h2>
+    <span class="section-note">Live snapshot &mdash; not filtered by range</span>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi kpi-paid">
+      <div class="kpi-label">Stock value</div>
+      <div class="kpi-value" id="kpiStockValue">&#8358;0</div>
+      <div class="kpi-note">Tracked products &mdash; not filtered by range</div>
+    </div>
+    <div class="kpi kpi-credit">
+      <div class="kpi-label">Low stock</div>
+      <div class="kpi-value" id="kpiLowStock">0</div>
+      <div class="kpi-note">At or below threshold &mdash; not filtered by range</div>
+    </div>
+    <div class="kpi kpi-danger">
+      <div class="kpi-label">Out of stock</div>
+      <div class="kpi-value" id="kpiOutOfStock">0</div>
+      <div class="kpi-note">Tracked products at zero &mdash; not filtered by range</div>
     </div>
   </div>
 
@@ -124,6 +150,40 @@
         <span class="section-note" id="topNote">By revenue</span>
       </div>
       <div class="rank-list" id="topProducts"></div>
+    </section>
+  </div>
+
+  <div class="grid-2">
+    <section class="panel" aria-labelledby="categoryHeading">
+      <div class="section-head">
+        <h2 class="section-title" id="categoryHeading">Revenue by category</h2>
+        <span class="section-note" id="categoryNote">Selected range</span>
+      </div>
+      <div class="rank-list" id="categoryBreakdown"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="stockHeading">
+      <div class="section-head">
+        <h2 class="section-title" id="stockHeading">Stock levels</h2>
+        <span class="section-note">Tracked products only</span>
+      </div>
+      <div class="table-wrap" id="inventoryWrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">Product</th>
+              <th scope="col">Category</th>
+              <th scope="col" class="num">On hand</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryBody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="inventoryEmpty" hidden>
+        <strong>Nothing tracked yet</strong>
+        Add starting stock to a product, or restock one, on the Sales screen to see it here.
+      </div>
     </section>
   </div>
 

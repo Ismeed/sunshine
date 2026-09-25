@@ -39,11 +39,18 @@
 
     kpiRevenue:     doc.getElementById('kpiRevenue'),
     kpiRevenueNote: doc.getElementById('kpiRevenueNote'),
+    kpiRevenueDelta:doc.getElementById('kpiRevenueDelta'),
     kpiCount:       doc.getElementById('kpiCount'),
     kpiCountNote:   doc.getElementById('kpiCountNote'),
+    kpiCountDelta:  doc.getElementById('kpiCountDelta'),
     kpiUnits:       doc.getElementById('kpiUnits'),
     kpiUnitsNote:   doc.getElementById('kpiUnitsNote'),
+    kpiUnitsDelta:  doc.getElementById('kpiUnitsDelta'),
     kpiOutstanding: doc.getElementById('kpiOutstanding'),
+
+    kpiStockValue: doc.getElementById('kpiStockValue'),
+    kpiLowStock:   doc.getElementById('kpiLowStock'),
+    kpiOutOfStock: doc.getElementById('kpiOutOfStock'),
 
     trendChart: doc.getElementById('trendChart'),
     trendStart: doc.getElementById('trendStart'),
@@ -52,6 +59,13 @@
 
     topNote:     doc.getElementById('topNote'),
     topProducts: doc.getElementById('topProducts'),
+
+    categoryNote:       doc.getElementById('categoryNote'),
+    categoryBreakdown:  doc.getElementById('categoryBreakdown'),
+
+    inventoryWrap:  doc.getElementById('inventoryWrap'),
+    inventoryBody:  doc.getElementById('inventoryBody'),
+    inventoryEmpty: doc.getElementById('inventoryEmpty'),
 
     ledgerWrap:  doc.getElementById('ledgerWrap'),
     ledgerBody:  doc.getElementById('ledgerBody'),
@@ -73,6 +87,8 @@
 
   var state = {
     sales: [],
+    products: [],
+    stockLevels: new Map(), // product_id -> { tracked, onHand }, from DB.getStockLevels()
     range: 'today',
     activeSale: null,
     deviceId: null,
@@ -254,6 +270,58 @@
 
   var RANGE_NOTE = { today: 'Today', '7': 'Last 7 days', '30': 'Last 30 days', all: 'All time' };
 
+  /* The window immediately before the current range - yesterday for
+     "Today", the 7 days before the current 7-day window, etc. - as a
+     [start, end) pair. null for "All time", which has no prior period to
+     compare against. */
+  function priorRangeBounds(range) {
+    if (range === 'all') return null;
+
+    var curStart = rangeStart(range);
+    var end = new Date(curStart);
+    var start = new Date(curStart);
+
+    if (range === 'today') start.setDate(start.getDate() - 1);
+    else if (range === '7') start.setDate(start.getDate() - 7);
+    else if (range === '30') start.setDate(start.getDate() - 30);
+    else return null;
+
+    return { start: start, end: end };
+  }
+
+  function salesInBounds(bounds) {
+    if (!bounds) return [];
+    var startTime = bounds.start.getTime();
+    var endTime = bounds.end.getTime();
+    return state.sales.filter(function (s) {
+      var t = new Date(s.sold_at).getTime();
+      return t >= startTime && t < endTime;
+    });
+  }
+
+  /* previous === 0 has no meaningful percentage (division by zero), so it
+     gets a "New" label instead of a nonsensical +Infinity% - and if both
+     periods are zero there's nothing worth saying at all. */
+  function formatDelta(current, previous) {
+    if (previous === 0) {
+      if (current === 0) return null;
+      return { text: 'New — none in the previous period', dir: 'up' };
+    }
+    var pct = Math.round(((current - previous) / previous) * 100);
+    if (pct === 0) return { text: 'No change vs previous period', dir: null };
+    return { text: (pct > 0 ? '+' : '') + pct + '% vs previous period', dir: pct > 0 ? 'up' : 'down' };
+  }
+
+  function applyDelta(el_, current, previous) {
+    var info = formatDelta(current, previous);
+    el_.classList.remove('is-up', 'is-down');
+    if (!info) { el_.hidden = true; return; }
+    el_.hidden = false;
+    el_.textContent = info.text;
+    if (info.dir === 'up') el_.classList.add('is-up');
+    else if (info.dir === 'down') el_.classList.add('is-down');
+  }
+
   /* ------------------------------------------------------------- render */
 
   function renderKpis() {
@@ -278,6 +346,115 @@
     el.kpiCountNote.textContent = note;
     el.kpiUnitsNote.textContent = note;
     el.rangeLabel.textContent = 'Showing: ' + note;
+
+    // Period-over-period, range-scoped KPIs only. Outstanding credit is a
+    // live snapshot across all sales with no "period" to compare against,
+    // so it never gets one of these.
+    var deltaEls = [el.kpiRevenueDelta, el.kpiCountDelta, el.kpiUnitsDelta];
+    var bounds = priorRangeBounds(state.range);
+
+    if (!bounds) {
+      // "All time" has no prior period at all - distinct from a prior
+      // period that existed but had zero sales, which legitimately shows
+      // "New" below. Collapsing the two (e.g. by treating a null bounds as
+      // "previous = 0") would make All time show a false "New" label
+      // instead of hiding the delta, since All time's own total is
+      // essentially never zero.
+      deltaEls.forEach(function (el_) { el_.hidden = true; });
+    } else {
+      var priorRows = salesInBounds(bounds);
+      var priorRevenue = 0, priorUnits = 0;
+      priorRows.forEach(function (s) {
+        priorRevenue += Number(s.total) || 0;
+        priorUnits += Number(s.quantity) || 0;
+      });
+      applyDelta(el.kpiRevenueDelta, revenue, priorRevenue);
+      applyDelta(el.kpiCountDelta, rows.length, priorRows.length);
+      applyDelta(el.kpiUnitsDelta, units, priorUnits);
+    }
+  }
+
+  /* Live snapshot, not scoped to the date-range selector - same convention
+     as outstanding credit above. Untracked products (no stock_movements
+     history) have nothing to report and are excluded entirely, not shown
+     with a zero. */
+  function renderInventorySummary() {
+    var tracked = [];
+    state.products.forEach(function (p) {
+      if (p.deleted) return;
+      var level = state.stockLevels.get(p.id);
+      if (level) tracked.push({ product: p, onHand: level.onHand });
+    });
+
+    var stockValue = 0, lowCount = 0, outCount = 0;
+    var rows = tracked.map(function (row) {
+      var price = Number(row.product.default_price) || 0;
+      var threshold = (row.product.low_stock_threshold != null)
+        ? row.product.low_stock_threshold
+        : DB.LOW_STOCK_DEFAULT;
+
+      // Unclamped - an oversold product's negative onHand genuinely
+      // reduces the value of stock actually on hand, same reasoning as
+      // never clamping the ledger sum itself.
+      stockValue += row.onHand * price;
+
+      var status = row.onHand <= 0 ? 'out' : (row.onHand <= threshold ? 'low' : 'ok');
+      if (status === 'out') outCount++;
+      else if (status === 'low') lowCount++;
+
+      return { product: row.product, onHand: row.onHand, status: status };
+    });
+
+    el.kpiStockValue.textContent = money(stockValue);
+    el.kpiLowStock.textContent = String(lowCount);
+    el.kpiOutOfStock.textContent = String(outCount);
+
+    renderInventoryTable(rows);
+  }
+
+  var STATUS_BADGE = {
+    out: ['badge-danger', 'Out'],
+    low: ['badge-credit', 'Low'],
+    ok:  ['badge-paid', 'OK']
+  };
+  var STATUS_SEVERITY = { out: 0, low: 1, ok: 2 };
+
+  function renderInventoryTable(rows) {
+    var sorted = rows.slice().sort(function (a, b) {
+      if (STATUS_SEVERITY[a.status] !== STATUS_SEVERITY[b.status]) {
+        return STATUS_SEVERITY[a.status] - STATUS_SEVERITY[b.status];
+      }
+      return (a.product.name || '').localeCompare(b.product.name || '');
+    });
+
+    clear(el.inventoryBody);
+    el.inventoryWrap.hidden = sorted.length === 0;
+    el.inventoryEmpty.hidden = sorted.length > 0;
+
+    sorted.forEach(function (row) {
+      var tr = doc.createElement('tr');
+
+      var nameTd = doc.createElement('td');
+      nameTd.className = 'cell-strong';
+      nameTd.textContent = row.product.name;
+      tr.appendChild(nameTd);
+
+      var catTd = doc.createElement('td');
+      catTd.textContent = row.product.category || 'Uncategorised';
+      tr.appendChild(catTd);
+
+      var onHandTd = doc.createElement('td');
+      onHandTd.className = 'num';
+      onHandTd.textContent = String(Math.max(0, row.onHand));
+      tr.appendChild(onHandTd);
+
+      var statusTd = doc.createElement('td');
+      var badgeInfo = STATUS_BADGE[row.status];
+      statusTd.appendChild(node('span', 'badge ' + badgeInfo[0], badgeInfo[1]));
+      tr.appendChild(statusTd);
+
+      el.inventoryBody.appendChild(tr);
+    });
   }
 
   function renderTrend() {
@@ -324,6 +501,41 @@
       : '';
   }
 
+  /* Shared by Top products and Revenue by category - both are a
+     revenue-sorted bar list of { name, revenue, units } rows, differing
+     only in the source of `name` and the container they render into. */
+  function renderRankList(container, items, emptyMessage) {
+    clear(container);
+
+    if (!items.length) {
+      container.appendChild(node('div', 'empty', emptyMessage));
+      return;
+    }
+
+    var max = items[0].revenue || 1;
+    items.forEach(function (item, i) {
+      var row = node('div', 'rank-row');
+      row.appendChild(node('span', 'rank-n', String(i + 1)));
+
+      var mid = node('div');
+      var nameLine = node('div');
+      nameLine.appendChild(node('span', 'rank-name', item.name));
+      mid.appendChild(nameLine);
+      mid.appendChild(node('div', 'rank-meta', item.units + (item.units === 1 ? ' unit sold' : ' units sold')));
+      row.appendChild(mid);
+
+      row.appendChild(node('span', 'rank-val', money(item.revenue)));
+
+      var track = node('div', 'rank-track');
+      var fill = node('div', 'rank-fill');
+      fill.style.width = Math.max((item.revenue / max) * 100, 3) + '%';
+      track.appendChild(fill);
+      row.appendChild(track);
+
+      container.appendChild(row);
+    });
+  }
+
   function renderTopProducts() {
     var rows = salesInRange(state.range);
     var byProduct = {};
@@ -340,35 +552,25 @@
       .slice(0, 8);
 
     el.topNote.textContent = 'By revenue — ' + RANGE_NOTE[state.range];
-    clear(el.topProducts);
+    renderRankList(el.topProducts, list, 'No sales in this range yet');
+  }
 
-    if (!list.length) {
-      el.topProducts.appendChild(node('div', 'empty', 'No sales in this range yet'));
-      return;
-    }
+  function renderCategoryBreakdown() {
+    var rows = salesInRange(state.range);
+    var byCategory = {};
 
-    var max = list[0].revenue || 1;
-    list.forEach(function (p, i) {
-      var row = node('div', 'rank-row');
-      row.appendChild(node('span', 'rank-n', String(i + 1)));
-
-      var mid = node('div');
-      var nameLine = node('div');
-      nameLine.appendChild(node('span', 'rank-name', p.name));
-      mid.appendChild(nameLine);
-      mid.appendChild(node('div', 'rank-meta', p.units + (p.units === 1 ? ' unit sold' : ' units sold')));
-      row.appendChild(mid);
-
-      row.appendChild(node('span', 'rank-val', money(p.revenue)));
-
-      var track = node('div', 'rank-track');
-      var fill = node('div', 'rank-fill');
-      fill.style.width = Math.max((p.revenue / max) * 100, 3) + '%';
-      track.appendChild(fill);
-      row.appendChild(track);
-
-      el.topProducts.appendChild(row);
+    rows.forEach(function (s) {
+      var key = s.category || 'Uncategorised';
+      if (!byCategory[key]) byCategory[key] = { name: key, revenue: 0, units: 0 };
+      byCategory[key].revenue += Number(s.total) || 0;
+      byCategory[key].units += Number(s.quantity) || 0;
     });
+
+    var list = Object.keys(byCategory).map(function (k) { return byCategory[k]; })
+      .sort(function (a, b) { return b.revenue - a.revenue; });
+
+    el.categoryNote.textContent = RANGE_NOTE[state.range];
+    renderRankList(el.categoryBreakdown, list, 'No sales in this range yet');
   }
 
   function renderLedger() {
@@ -426,14 +628,19 @@
 
   function refresh() {
     if (!unlocked) return Promise.resolve();
-    return DB.getAll('sales').then(function (rows) {
-      state.sales = rows;
-      renderRangeButtons();
-      renderKpis();
-      renderTrend();
-      renderTopProducts();
-      renderLedger();
-    });
+    return Promise.all([DB.getAll('sales'), DB.getAll('products'), DB.getStockLevels()])
+      .then(function (results) {
+        state.sales = results[0];
+        state.products = results[1];
+        state.stockLevels = results[2];
+        renderRangeButtons();
+        renderKpis();
+        renderTrend();
+        renderTopProducts();
+        renderCategoryBreakdown();
+        renderInventorySummary();
+        renderLedger();
+      });
   }
 
   /* --------------------------------------------------------- payments */
@@ -531,6 +738,8 @@
         renderRangeButtons();
         renderKpis();
         renderTopProducts();
+        renderCategoryBreakdown();
+        // Inventory is a live snapshot, not range-scoped - no re-render here.
       });
     }
 
@@ -562,7 +771,10 @@
     if (global.Sync) {
       global.Sync.onStateChange(renderSyncPill);
       global.Sync.init();
-      global.Sync.onPullComplete(refresh);
+      // onDataChanged, not onPullComplete: only re-render when a pull
+      // actually wrote something, not on every ~25s tick regardless -
+      // same reasoning as the Sales screen.
+      global.Sync.onDataChanged(refresh);
     }
 
     bootGate();
