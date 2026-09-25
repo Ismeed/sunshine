@@ -44,6 +44,7 @@
     pmLowStockThresholdError: doc.getElementById('pmLowStockThresholdError'),
     pmIconPicker:      doc.getElementById('pmIconPicker'),
     pmCancel:          doc.getElementById('pmCancel'),
+    pmSubmit:          doc.getElementById('pmSubmit'),
 
     salePanel:      doc.getElementById('salePanel'),
     salePanelClose: doc.getElementById('salePanelClose'),
@@ -78,6 +79,7 @@
     smQtyError:      doc.getElementById('smQtyError'),
     smNote:          doc.getElementById('smNote'),
     smCancel:        doc.getElementById('smCancel'),
+    smSubmit:        doc.getElementById('smSubmit'),
 
     toastStack:     doc.getElementById('toastStack')
   };
@@ -97,6 +99,13 @@
     deviceId: null,
     lastFocus: null
   };
+
+  /* In-flight guards. Every write handler locks synchronously before its
+     first await, so a double-tap (easy on a touch screen) can't run the
+     same write twice. The disabled attribute gives the user feedback; this
+     flag is what actually makes it safe, since it also covers Enter-key
+     submits and any path that doesn't go through the button. */
+  var busy = { product: false, sale: false, stock: false };
 
   var ICONS = [
     '📱', '💻', '🖥️', '⌚', '🎧', '🔊', '🔌', '🔋', '🪫',
@@ -482,6 +491,12 @@
       synced: false
     };
 
+    // Lock before any async work - a double-tap would otherwise create two
+    // separate products with the same name and two separate stock ledgers.
+    if (busy.product) return;
+    busy.product = true;
+    el.pmSubmit.disabled = true;
+
     // A positive starting stock is what makes the product tracked from day
     // one - left blank or zero, it stays untracked exactly like every
     // product that predates this feature.
@@ -501,6 +516,9 @@
     }).catch(function (err) {
       console.error('[app] could not save product', err);
       toast('Could not save that product', 'error');
+    }).then(function () {
+      busy.product = false;
+      el.pmSubmit.disabled = false;
     });
   }
 
@@ -601,6 +619,8 @@
     if (!ok) return;
 
     var product = state.activeProduct;
+    if (busy.sale) return;
+    busy.sale = true;
     el.saleSubmit.disabled = true;
 
     // Re-derive stock from scratch right now, rather than trusting
@@ -619,7 +639,10 @@
         return; // blocked - nothing written
       }
 
-      var total = qty * price;
+      // Round at the point of storage. qty * price is binary floating
+      // point, so 999.99 x 3 is 2999.9700000000003 - and that lands in the
+      // database and gets summed into revenue reports.
+      var total = DB.round2(qty * price);
       var ts = DB.nowISO();
 
       var sale = {
@@ -668,6 +691,7 @@
       console.error('[app] could not save sale', err);
       toast('Could not save that sale', 'error');
     }).then(function () {
+      busy.sale = false;
       el.saleSubmit.disabled = false;
     });
   }
@@ -709,6 +733,13 @@
       return;
     }
 
+    // Lock before any async work. Without this a double-tap runs the whole
+    // handler twice and writes two movement rows, adding the stock twice -
+    // the ledger has no idea they were meant to be one action.
+    if (busy.stock) return;
+    busy.stock = true;
+    el.smSubmit.disabled = true;
+
     var note = el.smNote.value.trim();
 
     // 'initial' vs 'restock' is decided by whether the product already has
@@ -731,6 +762,9 @@
     }).catch(function (err) {
       console.error('[app] could not save stock movement', err);
       toast('Could not save that stock update', 'error');
+    }).then(function () {
+      busy.stock = false;
+      el.smSubmit.disabled = false;
     });
   }
 

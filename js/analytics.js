@@ -15,6 +15,9 @@
   var doc = global.document;
   var unlocked = false; // in-memory only, see comment above.
 
+  /* In-flight guard for the payment write - see submitPayment(). */
+  var busyPayment = false;
+
   /* ----------------------------------------------------------- elements */
 
   var el = {
@@ -81,6 +84,7 @@
     payAmountError:    doc.getElementById('payAmountError'),
     payFull:           doc.getElementById('payFull'),
     payCancel:         doc.getElementById('payCancel'),
+    paySubmit:         doc.getElementById('paySubmit'),
 
     toastStack: doc.getElementById('toastStack')
   };
@@ -674,7 +678,9 @@
     var sale = state.activeSale;
     if (!sale) return;
 
-    var amount = Number(el.payAmount.value);
+    // Round the entered amount too, so the stored payment rows always add
+    // up to the sale's amount_paid rather than differing by float dust.
+    var amount = DB.round2(el.payAmount.value);
     var balance = Number(sale.balance) || 0;
 
     el.payAmount.classList.remove('is-invalid');
@@ -686,9 +692,17 @@
       return;
     }
 
+    // Lock before any async work. This is the highest-consequence handler
+    // in the app: without the guard a double-tap records the customer's
+    // payment twice and wipes a balance they still owe, so the shop simply
+    // loses that money with no trace that it was one payment.
+    if (busyPayment) return;
+    busyPayment = true;
+    el.paySubmit.disabled = true;
+
     var ts = DB.nowISO();
-    var newBalance = Math.max(0, round2(balance - amount));
-    var newAmountPaid = round2((Number(sale.amount_paid) || 0) + amount);
+    var newBalance = Math.max(0, DB.round2(balance - amount));
+    var newAmountPaid = DB.round2((Number(sale.amount_paid) || 0) + amount);
 
     var payment = {
       id: DB.newId(),
@@ -720,10 +734,13 @@
       .catch(function (err) {
         console.error('[analytics] could not record payment', err);
         toast('Could not record that payment', 'error');
+      })
+      .then(function () {
+        busyPayment = false;
+        el.paySubmit.disabled = false;
       });
   }
 
-  function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
 
   /* --------------------------------------------------------------- wire */
 

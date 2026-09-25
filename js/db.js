@@ -253,6 +253,19 @@
     return new Date().toISOString();
   }
 
+  /* Rounds a money amount to 2 decimal places. Shared by both screens so
+     the two can't drift apart on something this consequential.
+
+     Every monetary value that gets STORED must go through this. Binary
+     floating point can't represent most decimal fractions exactly, so
+     999.99 * 3 evaluates to 2999.9700000000003 - which then gets written
+     to the database, summed into revenue totals, and compared against
+     payment amounts. The screen would hide it (display formatting rounds
+     to 2dp), so the only symptom is books that quietly stop adding up. */
+  function round2(n) {
+    return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+  }
+
   var deviceIdPromise = null;
 
   function getDeviceId() {
@@ -424,6 +437,7 @@
 
     newId: newId,
     nowISO: nowISO,
+    round2: round2,
     getDeviceId: getDeviceId,
     ensureSeedData: ensureSeedData,
 

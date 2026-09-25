@@ -369,7 +369,13 @@
         notifyPullComplete();
       })
       .catch(function (err) {
-        console.error('[sync] sync pass failed', err);
+        // warn, not error: this path is expected and self-healing. The
+        // network dropped or a pass exceeded its ceiling; the pill drops to
+        // "Offline - will sync" and the next tick retries. On mobile data
+        // this is routine, and logging it as an error would fill the
+        // console with red during normal operation - which is exactly how
+        // a genuine error gets missed later.
+        console.warn('[sync] sync pass failed; will retry', err);
         // No dedicated "error" state in the pill - fall back to "offline"
         // rather than getting stuck on "syncing" forever.
         setState('offline');
